@@ -46,6 +46,8 @@ ACCENT    = "#57c8ff"
 
 
 MANUAL = "Manual"
+CURVE_TEXT = "Datasheet toe/shoulder curve"
+CURVE_TEXT_NA = "Datasheet toe/shoulder curve (no data for this film)"
 
 
 def spaced(text):
@@ -92,6 +94,10 @@ TIPS = {
     "gamma": "Gamma per channel (R, G, B), the reciprocal of the slope of the film's characteristic curve. Determines "
              "the gradation of the positive; different values per channel compensate for the differing contrasts of the "
              "three color layers. Editable only with film \"Manual\".",
+    "curve": "Applies the toe and shoulder of the film's characteristic curve from the manufacturer's datasheet on top "
+             "of the three gammas. White and black point stay exactly where they are; only the shape in between "
+             "changes, mostly in the deep shadows. Off = plain single-gamma model. Available only for films with "
+             "curve data (currently Kodak/Portra 400 (2026)), not with \"Manual\".",
     "incurve": "How the scanner encoded the values. A scanner profile (ICC) linearizes per channel via the "
                "curves of the profile; for 3f/fff the profile recorded in the file is chosen automatically. "
                "\"linear\" for linearly scanned TIFFs.",
@@ -245,6 +251,10 @@ class App(tk.Tk):
         for e in self.e_gammas:
             e.pack(side="left", padx=(0, 8))
         Tooltip(TIPS["gamma"], self.l_gamma, *self.e_gammas)
+        self.v_curve = tk.BooleanVar(value=False)
+        self.cb_curve = ttk.Checkbutton(c, text=CURVE_TEXT, variable=self.v_curve, command=self._schedule_preview)
+        self.cb_curve.grid(row=3, column=0, columnspan=3, sticky="w", **rowpad)
+        Tooltip(TIPS["curve"], self.cb_curve)
 
         # --- Profiles
         c = card(1, "Profiles")
@@ -535,9 +545,11 @@ class App(tk.Tk):
     def _on_film_change(self):
         """Film profile: take the gammas from the table and hide the gamma row. 'Manual': show the row for
         editing; the last displayed values remain as the starting point."""
+        self._update_curve_state()
         if self.v_film.get() == MANUAL:
             self.l_gamma.grid()
             self.gf.grid()
+            self._schedule_preview()                # the gammas do not change here, but the curve setting may
             return
         try:
             g = cn.find_film(self.v_film.get())
@@ -547,6 +559,18 @@ class App(tk.Tk):
             self._log(str(e))
         self.l_gamma.grid_remove()
         self.gf.grid_remove()
+
+    def _film_curve(self):
+        """Curve file of the selected film, None for 'Manual' or films without curve data."""
+        film = self.v_film.get()
+        return None if film == MANUAL else cn.film_curve_path(film)
+
+    def _update_curve_state(self):
+        """The curve checkbox is only active for films with curve data; the tick itself is kept for later."""
+        if self._film_curve():
+            self.cb_curve.configure(text=CURVE_TEXT, state="normal")
+        else:
+            self.cb_curve.configure(text=CURVE_TEXT_NA, state="disabled")
 
     @staticmethod
     def _four(vs):
@@ -608,6 +632,7 @@ class App(tk.Tk):
             use_bpoint=True, bits=16,
             crop=None, stats_crop=self._four(self.v_scrop),
             embed_icc="auto",
+            film_curve=self._film_curve() if self.v_curve.get() else None,
         )
         if not (0 < p["p_black"] <= 0.5 and 0 < p["p_bpoint"] <= 0.5):
             raise ValueError("White point and black point must be between 0 and 50 (percent)")
@@ -709,7 +734,8 @@ class App(tk.Tk):
         stats = self._preview_stats(p["stats_crop"])
         try:
             arr, info = cn.convert_codes(self.prev_codes, p["gammas"], p["in_curve"], p["out_curve"],
-                                         p["p_black"], p["p_bpoint"], p["black"], stats=stats, bits=8)
+                                         p["p_black"], p["p_bpoint"], p["black"], stats=stats, bits=8,
+                                         film_curve=p["film_curve"])
         except Exception as e:
             self._log(f"Preview: {e}")
             return
@@ -864,7 +890,7 @@ class App(tk.Tk):
     def _settings(self):
         return dict(
             input=self.v_in.get(), output=self.v_out.get(), film=self.v_film.get(),
-            gammas=[self.v_gr.get(), self.v_gg.get(), self.v_gb.get()],
+            gammas=[self.v_gr.get(), self.v_gg.get(), self.v_gb.get()], datasheet_curve=bool(self.v_curve.get()),
             in_curve=self._portable_icc(self._in_curve()), out_profile=self._portable_icc(self._out_profile_path() or ""),
             exposure=self.v_expo.get(), white_pct=self.v_wp.get(), black_pct=self.v_bp.get(),
             stats_crop=[v.get() for v in self.v_scrop],
@@ -893,6 +919,7 @@ class App(tk.Tk):
                 self.v_film.set(s["film"])
             if self.v_film.get() == MANUAL:
                 for v, x in zip((self.v_gr, self.v_gg, self.v_gb), s.get("gammas", ["", "", ""])): v.set(x)
+            self.v_curve.set(bool(s.get("datasheet_curve", False)))
             ic = s.get("in_curve", "linear")
             if ic.startswith("icc:"):
                 ic = "icc:" + cn.resolve_icc(ic[4:])

@@ -33,7 +33,7 @@ jobs:
       - name: Build BallastConverter.exe
         run: >
           pyinstaller --noconfirm --clean --onefile --windowed --name BallastConverter
-          --add-data "profiles;profiles" --add-data "VERSION;."
+          --add-data "profiles;profiles" --add-data "curves;curves" --add-data "VERSION;."
           --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile
           ballastconverter_gui.py
 

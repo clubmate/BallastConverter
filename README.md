@@ -34,7 +34,9 @@ classic theme.
 3. **Output profile**: the RGB working colour space of the result (Adobe RGB by default; sRGB and ProPhoto RGB
    are included). Its tone curve is used for encoding and the profile is embedded in the TIFF.
 4. **Film**: pick the film. The three gammas come from the table. Choose "Manual" to edit them; the values of
-   the last selected film remain as a starting point.
+   the last selected film remain as a starting point. **Datasheet toe/shoulder curve** adds the curvature of the
+   manufacturer's characteristic curve on top of the gammas (see "How it works"); it is only available for films
+   with curve data in the folder `curves` (currently Kodak/Portra 400 (2026)) and is off by default.
 5. **Frame**: drag a green frame on the preview around the image only, without the film rebate and the
    perforation. White and black point are determined from this area; the output is always the whole image.
    Convert stays disabled until a frame is set.
@@ -64,7 +66,8 @@ python ballastconverter.py scan.tif positive.tif --gammas 1.84 1.81 1.57 --out-c
 
 `--black 1` equals Exposure −1 in the GUI. `--p-black` and `--p-bpoint` are the white and black point
 percentiles as fractions (0.001 = 0.1 %). `--stats-crop` is the frame in pixels of the original image.
-`--help` lists everything.
+`--datasheet-curve` is the curve checkbox of the GUI; it needs `--film` with a film marked `[curve]` in
+`--list-films`. `--help` lists everything.
 
 ## Profiles
 
@@ -86,11 +89,21 @@ The percentile anchors and the exposure only scale and shift the result; they ne
 curves. That is why every one of these settings can still be corrected losslessly in Photoshop, provided the
 file is 16 bit and nothing was clipped.
 
+**Datasheet curve** (optional): a real characteristic curve is only straight in its middle. Near the film base it
+flattens into a toe, and each colour layer has its own toe. The single gamma per channel cannot follow that,
+which is one reason for a residual colour cast in the deepest shadows. For films with a curve file in the
+folder `curves` (Status M density over log exposure, read from the manufacturer's datasheet) the checkbox adds
+the deviation of that curve from its own straight line as a correction. White and black anchor stay exactly
+where the plain model puts them and the correction is zero outside of them; the thinnest point of the frame is
+assumed to sit halfway down the toe. Unticked, the output is bit-identical to the plain model. The datasheet
+describes fresh film in a normal process measured with Status M filters, not your roll or your scanner, so
+compare both settings on your own scans.
+
 ## Building the Windows executable yourself
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --noconfirm --onefile --windowed --name BallastConverter --add-data "profiles;profiles" --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile ballastconverter_gui.py
+pyinstaller --noconfirm --onefile --windowed --name BallastConverter --add-data "profiles;profiles" --add-data "curves;curves" --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile ballastconverter_gui.py
 ```
 
 The GitHub Actions workflow in `.github/workflows/release.yml` does exactly this on every push and attaches

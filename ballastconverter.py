@@ -15,6 +15,11 @@ Reconstructed from the decompiled functions:
 
 Only the steps that belong to the actual conversion are included. Gamma/White/Zones/Saturation/SmartClip are deliberately left out.
 
+Own addition, not part of the plugin: --datasheet-curve. For films with a curve file in the folder 'curves'
+(manufacturer's characteristic curves, Status M density over log exposure) the toe and shoulder of the datasheet
+curve are applied on top of the straight-line (single gamma) model. White and black anchor stay exactly where the
+plain model puts them; only the shape in between changes. Off by default, the result is then bit-identical.
+
 Requires: numpy, tifffile   (pip install numpy tifffile)
 
 Examples:
@@ -27,6 +32,7 @@ Examples:
 """
 import argparse
 import os
+import re
 import sys
 import numpy as np
 
@@ -364,7 +370,13 @@ FLOOR       = 3.204345703125e-05        # 1.05 / 32768, lower limit in 0x1000aa2
 # ---------------------------------------------------------------------------
 # Gamma curves (0x10003c20 = decode, 0x10003a50 = encode)
 # ---------------------------------------------------------------------------
+# Films with a characteristic-curve file in the folder 'curves' (own addition, see build_luts / curve_correction)
+FILM_CURVES = {
+    ('Kodak', 'Portra 400 (2026)'): 'kodak_portra_400.txt',
+}
+
 _ICC_CACHE = {}
+_CURVE_CACHE = {}
 
 
 class ConversionError(ValueError):
@@ -542,10 +554,12 @@ def high_percentile(hist, total, frac, lin):
 # ---------------------------------------------------------------------------
 # Core: LUT construction (0x100182e0, branch mode == 1)
 # ---------------------------------------------------------------------------
-def build_luts(hists, total, gammas, in_curve="linear", p_black=P_BLACK, p_bpoint=P_BPOINT, verbose=True, warn=None):
+def build_luts(hists, total, gammas, in_curve="linear", p_black=P_BLACK, p_bpoint=P_BPOINT, verbose=True, warn=None,
+               curve=None):
     """
     hists : 3 x 32768 channel histograms of the Photoshop codes, total: pixel count
     gammas: (gR, gG, gB)
+    curve : None (plugin model) or a curve dict from load_film_curve: datasheet toe/shoulder on top of the gammas
     returns luts (3 x 32769), bpoint, bpcolor (3,), plus lo/hi/v per channel
     """
     # lin[i] = decode(i/32768), i = 0..32768 (0x10003fc0 fills 0..32767; index 32768 is added as 1.0)
@@ -571,6 +585,16 @@ def build_luts(hists, total, gammas, in_curve="linear", p_black=P_BLACK, p_bpoin
             luts[c, 1:] = k[c] * lin[1:] ** (-g[c])              # (lo / lin[i])^g for i = 1..32768
         luts[c, 0] = luts[c, 1]                                  # LUT[0] = LUT[1]
 
+    # Own addition: datasheet toe/shoulder, exactly 0 at both anchors. All channels or none, never a colour shift.
+    use_curve = curve is not None and lo.min() > 0 and hi.min() > 0
+    if use_curve:
+        for c in range(3):
+            with np.errstate(divide="ignore"):
+                dens = -np.log10(lins[c][1:])
+            term = curve_correction(curve, c, dens, -np.log10(hi[c]), -np.log10(lo[c]))
+            luts[c, 1:] *= 10.0 ** term
+            luts[c, 0] = luts[c, 1]
+
     bpoint  = float(v.min())                                     # g2+0xb0
     bpcolor = v - bpoint                                         # g2+0xe8.. (BP Color)
 
@@ -578,7 +602,7 @@ def build_luts(hists, total, gammas, in_curve="linear", p_black=P_BLACK, p_bpoin
         for c, n in enumerate("RGB"):
             print(f"  {n}: gamma={g[c]:.4f}  lo={lo[c]:.6f}  hi={hi[c]:.6f}  k=lo^g={k[c]:.6f}  v=(lo/hi)^g={v[c]:.6f}")
         print(f"  BPoint={bpoint:.6f}  BPColor={bpcolor.round(6).tolist()}")
-    return luts, bpoint, bpcolor, dict(lo=lo, hi=hi, k=k, v=v, gammas=g)
+    return luts, bpoint, bpcolor, dict(lo=lo, hi=hi, k=k, v=v, gammas=g, curve=use_curve)
 
 
 # ---------------------------------------------------------------------------
@@ -697,19 +721,108 @@ def find_icc_by_name(name, dirs):
     return None
 
 
-def find_film(name):
+def find_film_key(name):
+    """(manufacturer, film) key of FILMS for 'Manufacturer/Film' or a unique film name."""
     if "/" in name:
         maker, film = name.split("/", 1)
         key = (maker.strip(), film.strip())
         if key in FILMS:
-            return FILMS[key]
+            return key
     hits = [k for k in FILMS if k[1].lower() == name.strip().lower()]
     if len(hits) == 1:
-        return FILMS[hits[0]]
+        return hits[0]
     if len(hits) > 1:
         raise ConversionError("ambiguous, please specify manufacturer/film: " + ", ".join(f"{m}/{f}" for m, f in hits))
     hits = [k for k in FILMS if name.strip().lower() in k[1].lower()]
     raise ConversionError("Film not found. Similar: " + ", ".join(f"{m}/{f}" for m, f in hits[:15]))
+
+
+def find_film(name):
+    return FILMS[find_film_key(name)]
+
+
+def film_curve_path(name):
+    """Path of the characteristic-curve file for a film ('Manufacturer/Film'), None if the film has none."""
+    try:
+        fn = FILM_CURVES.get(find_film_key(name))
+    except ConversionError:
+        return None
+    p = os.path.join(curves_dir(), fn) if fn else None
+    return p if p and os.path.isfile(p) else None
+
+
+def load_film_curve(path):
+    """Characteristic curves from a text file: columns logH, D_R, D_G, D_B (density rising with exposure),
+    header line '# straight: <logH0> <logH1>' = range of the straight-line fit. Returns a dict with
+    logH (n,), D (3, n), slope/intercept (3,) of the straight part, anchor (3,): density where the toe reaches half
+    the straight slope (the black anchor of a scan is placed there), dmax (3,): last density of the table."""
+    path = os.path.abspath(path)
+    if path in _CURVE_CACHE:
+        return _CURVE_CACHE[path]
+    straight = None
+    rows = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                t = line.strip()
+                if t.startswith("#"):
+                    m = re.match(r"#\s*straight:\s*([-+.\d]+)\s+([-+.\d]+)", t)
+                    if m:
+                        straight = (float(m.group(1)), float(m.group(2)))
+                    continue
+                if t:
+                    rows.append([float(x) for x in t.replace(",", " ").split()])
+        tab = np.array(rows, dtype=np.float64)
+    except (OSError, ValueError) as e:
+        raise ConversionError(f"curve file {os.path.basename(path)} unreadable: {e}")
+    if tab.ndim != 2 or tab.shape[1] != 4 or tab.shape[0] < 6 or straight is None:
+        raise ConversionError(f"curve file {os.path.basename(path)}: need columns logH D_R D_G D_B and a '# straight:' line")
+    order = np.argsort(tab[:, 0])
+    logH, D = tab[order, 0], tab[order, 1:].T
+    if np.any(np.diff(logH) <= 0) or np.any(np.diff(D, axis=1) <= 0):
+        raise ConversionError(f"curve file {os.path.basename(path)}: logH and densities must rise strictly")
+    m = (logH >= straight[0]) & (logH <= straight[1])
+    if m.sum() < 3:
+        raise ConversionError(f"curve file {os.path.basename(path)}: straight range contains fewer than 3 points")
+    slope = np.empty(3); intercept = np.empty(3); anchor = np.empty(3)
+    for c in range(3):
+        slope[c], intercept[c] = np.polyfit(logH[m], D[c][m], 1)
+        if slope[c] <= 0:
+            raise ConversionError(f"curve file {os.path.basename(path)}: straight part of channel {'RGB'[c]} has no positive slope")
+        local = np.gradient(D[c], logH)
+        if not np.any(local >= slope[c] / 2):
+            raise ConversionError(f"curve file {os.path.basename(path)}: channel {'RGB'[c]} never reaches half its straight slope")
+        i = int(np.argmax(local >= slope[c] / 2))                # first point (from low exposure) at half the straight slope
+        anchor[c] = D[c][0] if i == 0 else np.interp(slope[c] / 2, local[i - 1:i + 1], D[c][i - 1:i + 1])
+    cv = dict(path=path, logH=logH, D=D, slope=slope, intercept=intercept, anchor=anchor, dmax=D[:, -1].copy(),
+              straight=straight)
+    _CURVE_CACHE[path] = cv
+    return cv
+
+
+def curve_correction(cv, c, dens, d_hi, d_lo):
+    """Toe/shoulder term of the datasheet curve for channel c, in log10 exposure, for scanner densities dens
+    (array, D = -log10 of the linearized scanner value). d_hi = density of the black anchor (thinnest point),
+    d_lo = density of the white anchor (densest point). The scan is placed on the datasheet axis so that the black
+    anchor sits at cv['anchor'][c] (half-slope point of the toe), density differences are taken 1:1 (Status M).
+    The term is the deviation of the curve's inverse from its straight line, minus the straight line through its
+    values at the two anchors, so it is exactly 0 at both anchors and 0 outside of them: white and black stay where
+    the plain model puts them. Returned in log10 units, i.e. pos *= 10**term."""
+    logH, D = cv["logH"], cv["D"][c]
+    s, b, da, dmax = cv["slope"][c], cv["intercept"][c], cv["anchor"][c], cv["dmax"][c]
+    span = d_lo - d_hi
+    if not (span > 1e-6):
+        return np.zeros_like(dens)
+    def delta(dq):                                             # inverse curve minus its straight line
+        dq = np.clip(dq, da, dmax)
+        return np.interp(dq, D, logH) - (dq - b) / s
+    dsm = dens - d_hi + da                                     # scan density -> datasheet density
+    t = np.clip((dens - d_hi) / span, 0.0, 1.0)
+    d0 = delta(np.array([da]))[0]
+    d1 = delta(np.array([d_lo - d_hi + da]))[0]
+    term = delta(dsm) - d0 - (d1 - d0) * t
+    term[(dens < d_hi) | (dens > d_lo)] = 0.0
+    return term
 
 
 def resource_dir():
@@ -733,6 +846,12 @@ def profiles_dir():
     """Folder 'profiles' with the bundled ICC profiles (scanner profiles and working color spaces)."""
     import os
     return os.path.join(resource_dir(), "profiles")
+
+
+def curves_dir():
+    """Folder 'curves' with the bundled characteristic-curve files (see FILM_CURVES)."""
+    import os
+    return os.path.join(resource_dir(), "curves")
 
 
 def resolve_icc(path):
@@ -764,9 +883,10 @@ def resolve_gammas(film=None, gammas=None, log=print):
 def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
             p_black=P_BLACK, p_bpoint=P_BPOINT, black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True,
             bits=16, crop=None, stats_crop=None, embed_icc="auto", subsample=1,
-            log=print, progress=None, cancel=None):
+            log=print, progress=None, cancel=None, film_curve=None):
     """
     Complete conversion negative -> positive, writes output_path.
+    film_curve          : None, or path of a characteristic-curve file (see load_film_curve): datasheet toe/shoulder
     log(text)           : messages
     progress(frac)      : 0..1 (histogram = first half, writing = second half)
     cancel()            : returns True if the conversion should be aborted
@@ -785,6 +905,7 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         raise ConversionError(f"output folder does not exist: {os.path.dirname(os.path.abspath(output_path))}")
     if not (0 < p_black <= 0.5 and 0 < p_bpoint <= 0.5):
         raise ConversionError("percentiles must be between 0 and 0.5 (0 %..50 %)")
+    curve = load_film_curve(film_curve) if film_curve else None
     img = read_image(input_path)
     if crop:
         x0, y0, x1, y1 = crop
@@ -792,7 +913,8 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
     if subsample > 1:
         img = img[::subsample, ::subsample]
     H, W = img.shape[0], img.shape[1]
-    log(f"Image {W}x{H}, gammas {tuple(round(g, 4) for g in gammas)}, input curve {in_curve}")
+    log(f"Image {W}x{H}, gammas {tuple(round(g, 4) for g in gammas)}, input curve {in_curve}"
+        + (f", datasheet curve {os.path.basename(curve['path'])}" if curve else ""))
     stats_img = img
     if stats_crop:
         x0, y0, x1, y1 = stats_crop
@@ -817,7 +939,8 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         if progress:
             progress(0.5 * min(y0 + chunk, n_stats) / n_stats)
 
-    luts, bpoint, bpcolor, info = build_luts(hists, total, gammas, in_curve, p_black, p_bpoint, verbose=False, warn=log)
+    luts, bpoint, bpcolor, info = build_luts(hists, total, gammas, in_curve, p_black, p_bpoint, verbose=False, warn=log,
+                                             curve=curve)
     for c, n in enumerate("RGB"):
         log(f"  {n}: gamma={info['gammas'][c]:.4f}  lo={info['lo'][c]:.6f}  hi={info['hi'][c]:.6f}  "
             f"k=lo^g={info['k'][c]:.6f}  v=(lo/hi)^g={info['v'][c]:.6f}")
@@ -890,9 +1013,10 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
 
 
 def convert_codes(codes, gammas, in_curve="linear", out_curve="2.2", p_black=P_BLACK, p_bpoint=P_BPOINT,
-                  black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True, stats=None, bits=8):
+                  black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True, stats=None, bits=8, film_curve=None):
     """Conversion of an already loaded image (codes 0..32767, HxWx3), for the preview in the GUI.
     stats: (y0, y1, x0, x1) region in pixels of this image for the percentiles, None = whole image.
+    film_curve: None or path of a characteristic-curve file (datasheet toe/shoulder, see load_film_curve).
     Returns (output image uint8/uint16, info)."""
     stats_codes = codes if stats is None else codes[stats[0]:stats[1], stats[2]:stats[3]]
     if stats_codes.size == 0:
@@ -901,7 +1025,8 @@ def convert_codes(codes, gammas, in_curve="linear", out_curve="2.2", p_black=P_B
         raise ConversionError("percentiles must be between 0 and 0.5 (0 %..50 %)")
     hists = np.stack([np.bincount(stats_codes[..., c].ravel(), minlength=NBINS).astype(np.float64) for c in range(3)])
     total = stats_codes.shape[0] * stats_codes.shape[1]
-    luts, bpoint, bpcolor, info = build_luts(hists, total, gammas, in_curve, p_black, p_bpoint, verbose=False)
+    curve = load_film_curve(film_curve) if film_curve else None
+    luts, bpoint, bpcolor, info = build_luts(hists, total, gammas, in_curve, p_black, p_bpoint, verbose=False, curve=curve)
     # The whole pipeline is pointwise per channel: compute once for all 32768 codes, then only look up.
     all_codes = np.repeat(np.arange(NBINS, dtype=np.uint16)[:, None], 3, axis=1)          # (NBINS, 3)
     lin_tab = apply(all_codes, luts, bpoint, bpcolor, black, tuple(cc), use_bpoint)
@@ -933,13 +1058,14 @@ def main():
     ap.add_argument("--stats-crop", nargs=4, type=int, metavar=("X0", "Y0", "X1", "Y1"), help="build histogram/percentiles only from this region (pixels of the original image, also together with --crop), output stays complete; excludes film rebate and perforation")
     ap.add_argument("--embed-icc", default="auto", help="embed ICC profile: path, 'none' or 'auto' (default: with --out-curve icc: that profile, with 2.2 profiles/AdobeRGB1998.icc)")
     ap.add_argument("--subsample", type=int, default=1, help="only every n-th pixel (fast preview)")
+    ap.add_argument("--datasheet-curve", action="store_true", help="apply the toe/shoulder of the film's datasheet characteristic curve on top of the gammas (only films marked [curve] in --list-films, needs --film)")
     ap.add_argument("--list-films", action="store_true")
     ap.add_argument("--version", action="version", version=f"BallastConverter {version()}")
     a = ap.parse_args()
 
     if a.list_films:
         for (m, f), g in FILMS.items():
-            print(f"{m}/{f:45s} {g[0]:.3f} {g[1]:.3f} {g[2]:.3f}")
+            print(f"{m}/{f:45s} {g[0]:.3f} {g[1]:.3f} {g[2]:.3f}" + ("  [curve]" if (m, f) in FILM_CURVES else ""))
         return
     if not a.input or not a.output:
         ap.error("specify input and output")
@@ -948,8 +1074,13 @@ def main():
         gammas = resolve_gammas(a.film, a.gammas)
         if any(not (0.1 <= abs(g) <= 10.0) for g in gammas):
             raise ConversionError("gammas must be between 0.1 and 10")
+        film_curve = None
+        if a.datasheet_curve:
+            film_curve = film_curve_path(a.film) if a.film and not a.gammas else None
+            if not film_curve:
+                raise ConversionError("--datasheet-curve needs --film with a film marked [curve] in --list-films")
         convert(a.input, a.output, gammas, a.in_curve, a.out_curve, a.p_black, a.p_bpoint, a.black, tuple(a.cc),
-                not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample)
+                not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample, film_curve=film_curve)
     except ConversionError as e:
         raise SystemExit(f"error: {e}")
 
