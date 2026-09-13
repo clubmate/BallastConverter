@@ -1,0 +1,36 @@
+# --- local-only project material (never published) ---
+recherche/
+TODO.md
+start_gui_linux.sh
+.remember/
+.claude/
+
+# --- scans, test images and outputs ---
+*.tif
+*.tiff
+*.fff
+*.3f
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.8bf
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- build output (the Windows EXE is built by GitHub Actions) ---
+build/
+dist/
+*.spec
+VERSION
+
+# --- editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
