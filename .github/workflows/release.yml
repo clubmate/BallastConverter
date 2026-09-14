@@ -1,7 +1,9 @@
 name: Windows release
 
-# Every push to main produces a pre-release "build-<n>" with BallastConverter.exe attached.
+# Every push to main produces a pre-release "build-<n>" with BallastConverter-windows.zip attached.
 # A tag like v1.0 produces a regular release with that name.
+# The build is a --onedir folder, not a --onefile exe: single-file PyInstaller builds are unsigned
+# self-extracting executables and are regularly flagged as malware by Windows Defender.
 on:
   push:
     branches: [main]
@@ -30,9 +32,9 @@ jobs:
           echo "$V" > VERSION
           echo "VERSION=$V" >> "$GITHUB_ENV"
 
-      - name: Build BallastConverter.exe
+      - name: Build BallastConverter folder
         run: >
-          pyinstaller --noconfirm --clean --onefile --windowed --name BallastConverter
+          pyinstaller --noconfirm --clean --onedir --windowed --name BallastConverter
           --add-data "profiles;profiles" --add-data "curves;curves" --add-data "VERSION;."
           --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile
           ballastconverter_gui.py
@@ -42,14 +44,19 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python ballastconverter.py --version && python ballastconverter.py --list-films
 
+      - name: Zip the build
+        shell: pwsh
+        run: Compress-Archive -Path dist/BallastConverter -DestinationPath dist/BallastConverter-windows.zip
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.VERSION }}
           name: BallastConverter ${{ env.VERSION }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          files: dist/BallastConverter.exe
+          files: dist/BallastConverter-windows.zip
           body: |
             Windows build of commit ${{ github.sha }}.
-            Download `BallastConverter.exe`, no installation needed. Windows SmartScreen may warn about an unsigned
-            application: choose "More info" and "Run anyway".
+            Download `BallastConverter-windows.zip`, unpack it anywhere and start `BallastConverter.exe` inside the
+            folder. No installation needed. Windows SmartScreen may warn about an unsigned application: choose
+            "More info" and "Run anyway".

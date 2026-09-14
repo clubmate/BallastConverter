@@ -9,9 +9,13 @@ colour layer, and leave everything else (white point, grey balance, contrast) to
 
 ## Download
 
-Every commit on `main` is built automatically for Windows. Get `BallastConverter.exe` from the
-[Releases](../../releases) page. Nothing to install: the file contains Python, the GUI and the ICC profiles.
+Every commit on `main` is built automatically for Windows. Get `BallastConverter-windows.zip` from the
+[Releases](../../releases) page, unpack it anywhere and start `BallastConverter.exe` inside the folder.
+Nothing to install: the folder contains Python, the GUI and the ICC profiles.
 Windows SmartScreen may warn about an unsigned application; choose "More info" and "Run anyway".
+The program is not code-signed. If Windows Defender still reports the download as a threat, that is a
+false positive common to unsigned PyInstaller builds; you can build the program yourself (see below) or
+run the Python scripts directly.
 
 Settings are kept in `%USERPROFILE%\.ballastconverter.json`.
 
@@ -103,8 +107,11 @@ compare both settings on your own scans.
 
 ```
 pip install -r requirements.txt pyinstaller
-pyinstaller --noconfirm --onefile --windowed --name BallastConverter --add-data "profiles;profiles" --add-data "curves;curves" --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile ballastconverter_gui.py
+pyinstaller --noconfirm --onedir --windowed --name BallastConverter --add-data "profiles;profiles" --add-data "curves;curves" --collect-all sv_ttk --hidden-import imagecodecs --hidden-import tifffile ballastconverter_gui.py
 ```
+
+The result is the folder `dist/BallastConverter` with `BallastConverter.exe` inside. A single-file build
+(`--onefile`) works as well but is much more likely to be flagged by Windows Defender.
 
 The GitHub Actions workflow in `.github/workflows/release.yml` does exactly this on every push and attaches
 the result to a release. A tag such as `v1.0` produces a regular release; other commits produce pre-releases
