@@ -898,17 +898,21 @@ def film_short_name(film):
 
 
 def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT):
-    """Conversion settings as file-name tokens, e.g. 'Portra400-2026_toe_ev-0.5_w0.1_b0.5': film short name
+    """Conversion settings as file-name tokens, e.g. 'Portra400-2026_toe_ev-05_w01_b05': film short name
     (or 'g<R>-<G>-<B>' without a film), 'toe' with the datasheet curve, 'ev<+-x>' for an exposure other than 0
-    (exposure = -black), white and black percentile in percent. Only letters, digits, '.', '+', '-' and '_'."""
-    tokens = [film_short_name(film) if film else "g" + "-".join(f"{g:.2f}" for g in (gammas or (1, 1, 1)))]
+    (exposure = -black), white and black percentile in percent. Numbers are written without the decimal point
+    (0.1 -> 01, 0.5 -> 05, 1 -> 1, 1.84 -> 184) so that the name contains no dot besides the extension.
+    Only letters, digits, '+', '-' and '_'."""
+    def num(x, fmt="g"):
+        return format(x, fmt).replace(".", "")
+    tokens = [film_short_name(film) if film else "g" + "-".join(num(g, ".2f") for g in (gammas or (1, 1, 1)))]
     if film_curve:
         tokens.append("toe")
     exposure = round(-float(black), 4) + 0.0
     if exposure != 0:
-        tokens.append(f"ev{exposure:+g}")
-    tokens.append(f"w{round(p_black * 100, 4):g}")
-    tokens.append(f"b{round(p_bpoint * 100, 4):g}")
+        tokens.append("ev" + num(exposure, "+g"))
+    tokens.append("w" + num(round(p_black * 100, 4)))
+    tokens.append("b" + num(round(p_bpoint * 100, 4)))
     return "_".join(tokens)
 
 

@@ -88,8 +88,8 @@ TIPS = {
     "in": "Scan of the negative as TIFF or 3f/fff, 16 bit recommended. After selection the image is loaded and "
           "converted as a preview on the right.",
     "out": "Target file of the conversion, always a 16-bit TIFF with embedded output profile. The name is built from "
-           "the scan name and the settings, e.g. <scan>_Portra400-2026_toe_ev-0.5_w0.1_b0.5.tif (film, toe = datasheet "
-           "curve on, ev = exposure if not 0, w/b = white and black point in percent), and follows every change. "
+           "the scan name and the settings, e.g. <scan>_Portra400-2026_toe_ev-05_w01_b05.tif (film, toe = datasheet "
+           "curve on, ev = exposure if not 0, w/b = white and black point in percent, numbers without the decimal point), and follows every change. "
            "The \"…\" button chooses the output folder; the scan's own folder means next to the scan.",
     "film": "Film profile from the table of the ColorPerfect plugin plus own entries. Sets the three gammas. "
             "\"Manual\" unlocks the gamma fields for input; the last displayed values remain as the starting point.",
@@ -196,11 +196,11 @@ class App(tk.Tk):
         outer.grid(row=0, column=0, sticky="nsew")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
-        outer.columnconfigure(0, weight=0)
-        outer.columnconfigure(1, weight=1)
+        outer.columnconfigure(0, weight=1, uniform="half")   # settings and preview always share the width 50/50
+        outer.columnconfigure(1, weight=1, uniform="half")
         outer.rowconfigure(0, weight=1)
         left = ttk.Frame(outer, style="Root.TFrame")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 24))
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
         left.columnconfigure(0, weight=1)
         rowpad = dict(pady=6)
 
@@ -345,7 +345,7 @@ class App(tk.Tk):
 
         # --- Preview (right, full height) as a card
         pf = ttk.Frame(outer, style="Card.TFrame", padding=(20, 16, 20, 20))
-        pf.grid(row=0, column=1, sticky="nsew")
+        pf.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
         pf.columnconfigure(0, weight=1)
         pf.rowconfigure(1, weight=1)
         hf = ttk.Frame(pf, style="Inner.TFrame")

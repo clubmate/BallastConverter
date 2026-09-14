@@ -31,7 +31,7 @@ classic theme.
 
 ## Using the GUI
 
-1. **Negative scan**: choose the TIFF or 3f/fff file. The output name is built from the scan name and the settings, e.g. `<scan>_Portra400-2026_toe_ev-0.5_w0.1_b0.5.tif`: film, `toe` when the datasheet curve is on, `ev` = exposure when not 0, `w`/`b` = white and black point in percent. It follows every change; the `…` button next to it chooses the output folder (default: next to the scan). The same settings are also written into the TIFF (ImageDescription tag).
+1. **Negative scan**: choose the TIFF or 3f/fff file. The output name is built from the scan name and the settings, e.g. `<scan>_Portra400-2026_toe_ev-05_w01_b05.tif`: film, `toe` when the datasheet curve is on, `ev` = exposure when not 0, `w`/`b` = white and black point in percent; numbers are written without the decimal point (0.5 = `05`) so the name has no dot besides the extension. It follows every change; the `…` button next to it chooses the output folder (default: next to the scan). The same settings are also written into the TIFF (ImageDescription tag).
 2. **Input profile**: for 3f/fff files the scanner profile named in the file is selected automatically
    (marked "from the file's metadata"). For linearly scanned TIFFs choose `linear`. Other profiles can be picked
    with "…".
