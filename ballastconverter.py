@@ -880,13 +880,65 @@ def resolve_gammas(film=None, gammas=None, log=print):
     return tuple(g)
 
 
+def film_short_name(film):
+    """Short film name for file names: without manufacturer, plugin codes in [] dropped, spaces removed,
+    groups in () or {} appended with '-': 'Kodak/Portra 400 (2026)' -> 'Portra400-2026',
+    'Kodak/Portra 400 [4056] [5056] [6056]' -> 'Portra400', 'Kodak/Portra 800 {2008 Push 1}' -> 'Portra800-2008-Push1'."""
+    name = film.split("/", 1)[-1]
+    name = re.sub(r"\[[^\]]*\]", "", name)
+    groups = re.findall(r"[({]([^)}]*)[)}]", name)
+    base = re.sub(r"[^A-Za-z0-9]+", "", re.sub(r"[({][^)}]*[)}]", "", name))
+    parts = [base] if base else []
+    for g in groups:
+        g = re.sub(r"(?<=[A-Za-z])\s+(?=\d)", "", g)          # 'Push 1' -> 'Push1'
+        g = re.sub(r"[^A-Za-z0-9]+", "-", g).strip("-")
+        if g:
+            parts.append(g)
+    return "-".join(parts) or "film"
+
+
+def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT):
+    """Conversion settings as file-name tokens, e.g. 'Portra400-2026_toe_ev-0.5_w0.1_b0.5': film short name
+    (or 'g<R>-<G>-<B>' without a film), 'toe' with the datasheet curve, 'ev<+-x>' for an exposure other than 0
+    (exposure = -black), white and black percentile in percent. Only letters, digits, '.', '+', '-' and '_'."""
+    tokens = [film_short_name(film) if film else "g" + "-".join(f"{g:.2f}" for g in (gammas or (1, 1, 1)))]
+    if film_curve:
+        tokens.append("toe")
+    exposure = round(-float(black), 4) + 0.0
+    if exposure != 0:
+        tokens.append(f"ev{exposure:+g}")
+    tokens.append(f"w{round(p_black * 100, 4):g}")
+    tokens.append(f"b{round(p_bpoint * 100, 4):g}")
+    return "_".join(tokens)
+
+
+def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT,
+                         in_curve="linear", out_curve="2.2", stats_crop=None):
+    """One-line summary of the conversion settings, stored in the TIFF's ImageDescription tag (7-bit ASCII)."""
+    parts = [f"BallastConverter {version()}"]
+    if film:
+        parts.append(f"film={film}")
+    if gammas:
+        parts.append("gammas=" + " ".join(f"{g:.3f}" for g in gammas))
+    parts.append("datasheet_curve=" + ("on" if film_curve else "off"))
+    parts.append(f"exposure={round(-float(black), 4) + 0.0:+g}")
+    parts.append(f"white={round(p_black * 100, 4):g}%")
+    parts.append(f"black={round(p_bpoint * 100, 4):g}%")
+    parts.append(f"in_curve={in_curve}")
+    parts.append(f"out_curve={out_curve}")
+    if stats_crop:
+        parts.append("stats_crop=" + " ".join(str(int(v)) for v in stats_crop))
+    return "; ".join(parts).encode("ascii", "replace").decode("ascii")
+
+
 def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
             p_black=P_BLACK, p_bpoint=P_BPOINT, black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True,
             bits=16, crop=None, stats_crop=None, embed_icc="auto", subsample=1,
-            log=print, progress=None, cancel=None, film_curve=None):
+            log=print, progress=None, cancel=None, film_curve=None, film=None):
     """
     Complete conversion negative -> positive, writes output_path.
     film_curve          : None, or path of a characteristic-curve file (see load_film_curve): datasheet toe/shoulder
+    film                : film name, only for the settings summary in the TIFF's ImageDescription
     log(text)           : messages
     progress(frac)      : 0..1 (histogram = first half, writing = second half)
     cancel()            : returns True if the conversion should be aborted
@@ -960,9 +1012,11 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         extratags.append((34675, 7, len(icc), icc, True))      # InterColorProfile
         log(f"  embedded profile: {icc_path}")
 
+    description = settings_description(film, gammas, bool(film_curve), black, p_black, p_bpoint,
+                                       in_curve, os.path.basename(str(out_curve)), stats_crop)
     try:
         out = tifffile.memmap(output_path, shape=(H, W, 3), dtype=np.uint16 if bits == 16 else np.uint8,
-                              photometric="rgb", extratags=extratags)
+                              photometric="rgb", description=description, extratags=extratags)
     except OSError as e:
         raise ConversionError(f"cannot write {output_path}: {e}")
 
@@ -1080,7 +1134,8 @@ def main():
             if not film_curve:
                 raise ConversionError("--datasheet-curve needs --film with a film marked [curve] in --list-films")
         convert(a.input, a.output, gammas, a.in_curve, a.out_curve, a.p_black, a.p_bpoint, a.black, tuple(a.cc),
-                not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample, film_curve=film_curve)
+                not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample, film_curve=film_curve,
+                film=a.film if not a.gammas else None)
     except ConversionError as e:
         raise SystemExit(f"error: {e}")
 

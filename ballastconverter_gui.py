@@ -87,8 +87,10 @@ def profile_label(path, info):
 TIPS = {
     "in": "Scan of the negative as TIFF or 3f/fff, 16 bit recommended. After selection the image is loaded and "
           "converted as a preview on the right.",
-    "out": "Target file of the conversion, always a 16-bit TIFF with embedded output profile. Suggested as "
-           "<name>_positive.tif when the scan is chosen.",
+    "out": "Target file of the conversion, always a 16-bit TIFF with embedded output profile. The name is built from "
+           "the scan name and the settings, e.g. <scan>_Portra400-2026_toe_ev-0.5_w0.1_b0.5.tif (film, toe = datasheet "
+           "curve on, ev = exposure if not 0, w/b = white and black point in percent), and follows every change. "
+           "The \"…\" button chooses the output folder; the scan's own folder means next to the scan.",
     "film": "Film profile from the table of the ColorPerfect plugin plus own entries. Sets the three gammas. "
             "\"Manual\" unlocks the gamma fields for input; the last displayed values remain as the starting point.",
     "gamma": "Gamma per channel (R, G, B), the reciprocal of the slope of the film's characteristic curve. Determines "
@@ -175,7 +177,7 @@ class App(tk.Tk):
         self.preview_photo = None
         self.prev_codes = None         # downscaled negative as codes (HxWx3 uint16), basis of the live preview
         self.loaded_path = None
-        self.suggested_out = None      # output name the program suggested last (only that one gets replaced)
+        self.last_input = None         # scan the current output name belongs to (see _suggest_output)
         self.pending_rect = None       # (path, W, H, rect) from the settings file, applied once the image is loaded
         self._preview_job = None
         self._build()
@@ -229,11 +231,12 @@ class App(tk.Tk):
         b_in.grid(row=1, column=2, padx=(8, 0), **rowpad)
         Tooltip(TIPS["in"], l_in, e_in, b_in)
         l_out = label(c, "Output (TIFF)", 2)
-        e_out = ttk.Entry(c, textvariable=self.v_out, width=40)
+        e_out = ttk.Entry(c, textvariable=self.v_out, width=40, state="readonly")
         e_out.grid(row=2, column=1, sticky="ew", **rowpad)
-        b_out = ttk.Button(c, text="…", width=3, command=self._pick_out)
+        b_out = ttk.Button(c, text="…", width=3, command=self._pick_out_dir)
         b_out.grid(row=2, column=2, padx=(8, 0), **rowpad)
         Tooltip(TIPS["out"], l_out, e_out, b_out)
+        self.out_dir = None            # output folder chosen with "…"; None = next to the scan
 
         # --- Film
         c = card(2, "Film")
@@ -252,7 +255,7 @@ class App(tk.Tk):
             e.pack(side="left", padx=(0, 8))
         Tooltip(TIPS["gamma"], self.l_gamma, *self.e_gammas)
         self.v_curve = tk.BooleanVar(value=False)
-        self.cb_curve = ttk.Checkbutton(c, text=CURVE_TEXT, variable=self.v_curve, command=self._schedule_preview)
+        self.cb_curve = ttk.Checkbutton(c, text=CURVE_TEXT, variable=self.v_curve, command=self._setting_changed)
         self.cb_curve.grid(row=3, column=0, columnspan=3, sticky="w", **rowpad)
         Tooltip(TIPS["curve"], self.cb_curve)
 
@@ -364,9 +367,10 @@ class App(tk.Tk):
         self.prev_meta = None          # mapping preview -> original pixels
         self.rect_start = None
         self._on_film_change()
-        for v in (self.v_expo, self.v_wp, self.v_bp, self.v_gr, self.v_gg, self.v_gb, self.v_incurve, self.v_outprof,
-                  *self.v_scrop):
+        for v in (self.v_incurve, self.v_outprof, *self.v_scrop):
             v.trace_add("write", lambda *_: self._schedule_preview())
+        for v in (self.v_expo, self.v_wp, self.v_bp, self.v_gr, self.v_gg, self.v_gb):
+            v.trace_add("write", lambda *_: self._setting_changed())
 
     # ------------------------------------------------------------------ Theme
     def _apply_theme(self):
@@ -418,14 +422,48 @@ class App(tk.Tk):
             self._use_input(p)
 
     def _use_input(self, p):
-        """New scan chosen: suggest the output name (unless the user typed their own), detect the profile, load."""
-        base, _ = os.path.splitext(p)
-        suggestion = base + "_positive.tif"
-        if not self.v_out.get().strip() or self.v_out.get().strip() == self.suggested_out:
-            self.v_out.set(suggestion)
-        self.suggested_out = suggestion
+        """New scan chosen: output name follows the scan, detect the profile, load."""
+        self._suggest_output(p)
         self._detect_profile(p)
         self._load_preview(p)
+
+    def _suggest_output(self, p):
+        """Output = <scan name>_<settings>.tif (see cn.settings_name), in the chosen output folder or next to
+        the scan. While a field holds no valid number the previous settings suffix is kept."""
+        old_name = os.path.basename(self.v_out.get().strip())
+        old_stem = os.path.splitext(os.path.basename(self.last_input or ""))[0]
+        suffix = self._settings_suffix()
+        if suffix is None:
+            suffix = old_name[len(old_stem):] if old_stem and old_name.startswith(old_stem) and "." in old_name[len(old_stem):] \
+                else "_positive.tif"
+        stem = os.path.splitext(p)[0]
+        new = os.path.join(self.out_dir, os.path.basename(stem) + suffix) if self.out_dir else stem + suffix
+        self.last_input = p
+        self.v_out.set(new)
+
+    def _settings_suffix(self):
+        """'_<settings>.tif' from the current fields (see cn.settings_name), None while a field is not a number."""
+        try:
+            film = None if self.v_film.get() == MANUAL else self.v_film.get()
+            gammas = None if film else tuple(float(v.get()) for v in (self.v_gr, self.v_gg, self.v_gb))
+            curve = bool(self.v_curve.get()) and self._film_curve() is not None
+            wp, bp = self._num(self.v_wp, "White point"), self._num(self.v_bp, "Black point")
+            if not (0 < wp <= 50 and 0 < bp <= 50):
+                return None
+            return "_" + cn.settings_name(film, gammas, curve, -self._num(self.v_expo, "Exposure", empty=0.0),
+                                          wp / 100.0, bp / 100.0) + ".tif"
+        except (ValueError, cn.ConversionError):
+            return None
+
+    def _refresh_output_name(self):
+        """Rebuild the output name from the settings once a scan is known."""
+        if self.last_input:
+            self._suggest_output(self.last_input)
+
+    def _setting_changed(self):
+        """A conversion setting changed: new preview and, with "Name from settings", a new output name."""
+        self._refresh_output_name()
+        self._schedule_preview()
 
     def _detect_profile(self, path):
         """3f/fff: read the profile name from the metadata and choose the matching ICC from 'profiles' or next to the scan."""
@@ -473,11 +511,16 @@ class App(tk.Tk):
                 self.v_incurve.set(new)
         self.cb_in["values"] = list(self.in_curves)
 
-    def _pick_out(self):
-        p = filedialog.asksaveasfilename(title="Output", defaultextension=".tif",
-                                         filetypes=[("TIFF", "*.tif *.tiff")])
-        if p:
-            self.v_out.set(p)
+    def _pick_out_dir(self):
+        """Output folder; choosing the scan's own folder returns to 'next to the scan'."""
+        start = self.out_dir or os.path.dirname(self.last_input or self.v_in.get().strip()) or None
+        d = filedialog.askdirectory(title="Output folder", initialdir=start, mustexist=True)
+        if not d:
+            return
+        scan_dir = os.path.dirname(self.last_input) if self.last_input else None
+        same = scan_dir and os.path.normcase(os.path.normpath(d)) == os.path.normcase(os.path.normpath(scan_dir))
+        self.out_dir = None if same else d
+        self._refresh_output_name()
 
     def _pick_icc_in(self):
         p = filedialog.askopenfilename(title="Scanner profile (ICC)", filetypes=[("ICC", "*.icc *.icm"), ("All", "*.*")])
@@ -553,7 +596,7 @@ class App(tk.Tk):
         if self.v_film.get() == MANUAL:
             self.l_gamma.grid()
             self.gf.grid()
-            self._schedule_preview()                # the gammas do not change here, but the curve setting may
+            self._setting_changed()                 # the gammas do not change here, but the name and the curve setting may
             return
         try:
             g = cn.find_film(self.v_film.get())
@@ -563,6 +606,7 @@ class App(tk.Tk):
             self._log(str(e))
         self.l_gamma.grid_remove()
         self.gf.grid_remove()
+        self._refresh_output_name()
 
     def _film_curve(self):
         """Curve file of the selected film, None for 'Manual' or films without curve data."""
@@ -637,6 +681,7 @@ class App(tk.Tk):
             crop=None, stats_crop=self._four(self.v_scrop),
             embed_icc="auto",
             film_curve=self._film_curve() if self.v_curve.get() else None,
+            film=film,
         )
         if not (0 < p["p_black"] <= 0.5 and 0 < p["p_bpoint"] <= 0.5):
             raise ValueError("White point and black point must be between 0 and 50 (percent)")
@@ -893,7 +938,7 @@ class App(tk.Tk):
     # ------------------------------------------------------------------ Settings
     def _settings(self):
         return dict(
-            input=self.v_in.get(), output=self.v_out.get(), film=self.v_film.get(),
+            input=self.v_in.get(), output=self.v_out.get(), output_dir=self.out_dir or "", film=self.v_film.get(),
             gammas=[self.v_gr.get(), self.v_gg.get(), self.v_gb.get()], datasheet_curve=bool(self.v_curve.get()),
             in_curve=self._portable_icc(self._in_curve()), out_profile=self._portable_icc(self._out_profile_path() or ""),
             exposure=self.v_expo.get(), white_pct=self.v_wp.get(), black_pct=self.v_bp.get(),
@@ -919,6 +964,9 @@ class App(tk.Tk):
             return
         try:
             self.v_in.set(s.get("input", "")); self.v_out.set(s.get("output", ""))
+            self.out_dir = s.get("output_dir") or None
+            if self.out_dir and not os.path.isdir(self.out_dir):
+                self.out_dir = None
             if s.get("film") in film_names():
                 self.v_film.set(s["film"])
             if self.v_film.get() == MANUAL:
@@ -945,9 +993,8 @@ class App(tk.Tk):
                 self.pending_rect = (si["path"], si.get("W"), si.get("H"), rect)     # applied after loading
             self._on_film_change()
             if os.path.isfile(self.v_in.get()):
-                stem = os.path.splitext(self.v_in.get())[0]
-                # an output next to the scan that starts with its name counts as "suggested": a new scan replaces it
-                self.suggested_out = self.v_out.get().strip() if self.v_out.get().strip().startswith(stem) else stem + "_positive.tif"
+                self.last_input = self.v_in.get()   # the saved output belongs to this scan
+                self._suggest_output(self.v_in.get())
                 self._detect_profile(self.v_in.get())
                 self._load_preview(self.v_in.get())
         except Exception:
