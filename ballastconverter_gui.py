@@ -331,7 +331,11 @@ class App(tk.Tk):
         self.pb = ttk.Progressbar(af, mode="determinate", maximum=1000)
         self.pb.grid(row=0, column=1, sticky="ew", pady=(4, 6))
         self.pb.grid_remove()                        # only visible while a conversion runs
-        self.l_status = ttk.Label(af, text="", style="Status.TLabel", anchor="w")
+        # The row keeps the bar's height while it is hidden, and the status line never asks for more
+        # width than it gets (long lines are clipped): otherwise the left column, the window and the
+        # preview would resize with every message during a conversion.
+        af.rowconfigure(0, minsize=self.pb.winfo_reqheight() + 10)
+        self.l_status = ttk.Label(af, text="", style="Status.TLabel", anchor="w", width=10)
         self.l_status.configure(background=BG)       # the widget option overrides the style and carries the theme's grey
         self.l_status.grid(row=1, column=1, sticky="ew")
         self.log_lines = []
