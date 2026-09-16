@@ -255,6 +255,10 @@ FILMS = {
     # 0.1 % percentiles, no datasheet curve). Only blue differs materially from the data sheet (1.91 instead of 1.57):
     # the scanner's blue channel sees the yellow dye with less contrast than Status M. See recherche/gammafit/Auswertung.md.
     ('Kodak', 'Portra 400 (X5 fit)'): (1.80, 1.811, 1.91),
+    # Second scanner-specific fit (2026-09-16): red and blue fitted on 15 user-confirmed neutral surfaces (asphalt,
+    # concrete, white paint, white cotton, black rubber) across the same seven scans, per-scan grey pipette allowed.
+    # Both red and blue show a crossover against the data sheet: red 1.70 (darker surfaces lacked red), blue 1.95.
+    ('Kodak', 'Portra 400 (X5 neutral)'): (1.70, 1.811, 1.95),
     ('Kodak', 'Portra 400NC'): (1.890000, 1.820000, 1.640000),
     ('Kodak', 'Portra 400NC {2008}'): (1.843000, 1.794000, 1.566000),
     ('Kodak', 'Portra 400VC'): (1.710000, 1.650000, 1.490000),
