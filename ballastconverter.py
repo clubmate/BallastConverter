@@ -259,6 +259,11 @@ FILMS = {
     # concrete, white paint, white cotton, black rubber) across the same seven scans, per-scan grey pipette allowed.
     # Both red and blue show a crossover against the data sheet: red 1.70 (darker surfaces lacked red), blue 1.95.
     ('Kodak', 'Portra 400 (X5 neutral)'): (1.70, 1.811, 1.95),
+    # Third scanner-specific fit (2026-09-18), after the Fuji Frontier patents (US6160634): grey-balance line of the
+    # film learned from all pixels of the same seven scans (red and blue density against green density, pixels near
+    # the running mean only). The line is straight within 0.03 D; its slopes give red 1.90 and blue 1.85.
+    # See recherche/frontier/Auswertung.md.
+    ('Kodak', 'Portra 400 (X5 balance)'): (1.90, 1.811, 1.85),
     ('Kodak', 'Portra 400NC'): (1.890000, 1.820000, 1.640000),
     ('Kodak', 'Portra 400NC {2008}'): (1.843000, 1.794000, 1.566000),
     ('Kodak', 'Portra 400VC'): (1.710000, 1.650000, 1.490000),
