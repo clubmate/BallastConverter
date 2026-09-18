@@ -746,6 +746,8 @@ class App(tk.Tk):
             img = cn.read_image(path)
             h, w = img.shape[0], img.shape[1]
             s = max(1, int(np.ceil(max(h, w) / PREVIEW_LONG_SIDE)))
+            if s % 2 == 0:                       # odd step: samples both phases of a 2x2 pixel pattern
+                s += 1                           # (Flextight 3f scans show one; an even step biases the anchors)
             codes = cn.to_codes(np.asarray(img[::s, ::s]))
             del img
             self.q.put(("loaded", (path, codes, w, h, s)))

@@ -975,6 +975,9 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
     if crop:
         x0, y0, x1, y1 = crop
         img = img[y0:y1, x0:x1]
+    if subsample > 1 and subsample % 2 == 0:
+        subsample += 1                         # odd step: samples both phases of a 2x2 pixel pattern equally
+        log(f"subsample raised to {subsample} (even steps bias the percentiles on scans with a checkerboard pattern)")
     if subsample > 1:
         img = img[::subsample, ::subsample]
     H, W = img.shape[0], img.shape[1]
@@ -986,7 +989,8 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         if crop:                                   # stats-crop refers to the original image
             x0 -= crop[0]; x1 -= crop[0]; y0 -= crop[1]; y1 -= crop[1]
         s = subsample
-        stats_img = img[max(y0, 0) // s:max(y1, 0) // s, max(x0, 0) // s:max(x1, 0) // s]
+        up = lambda v: -(-max(v, 0) // s)       # start rounded up: never a row/column outside the region
+        stats_img = img[up(y0):max(y1, 0) // s, up(x0):max(x1, 0) // s]
         if stats_img.size == 0:
             raise ConversionError("Statistics region lies outside the image")
     chunk = 256
