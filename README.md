@@ -40,7 +40,7 @@ classic theme.
 4. **Film**: pick the film. The three gammas come from the table. Choose "Manual" to edit them; the values of
    the last selected film remain as a starting point. **Datasheet toe/shoulder curve** adds the curvature of the
    manufacturer's characteristic curve on top of the gammas (see "How it works"); it is only available for films
-   with curve data in the folder `curves` (currently Kodak/Portra 400 (2026)) and is off by default.
+   with curve data in the folder `curves` (currently the Kodak/Portra 400 presets) and is off by default.
 5. **Frame**: drag a green frame on the preview around the image only, without the film rebate and the
    perforation. White and black point are determined from this area; the output is always the whole image.
    Convert stays disabled until a frame is set.
@@ -99,9 +99,12 @@ which is one reason for a residual colour cast in the deepest shadows. For films
 folder `curves` (Status M density over log exposure, read from the manufacturer's datasheet) the checkbox adds
 the deviation of that curve from its own straight line as a correction. White and black anchor stay exactly
 where the plain model puts them and the correction is zero outside of them; the thinnest point of the frame is
-assumed to sit halfway down the toe. Unticked, the output is bit-identical to the plain model. The datasheet
-describes fresh film in a normal process measured with Status M filters, not your roll or your scanner, so
-compare both settings on your own scans.
+assumed to sit halfway down the toe. Unticked, the output is bit-identical to the plain model. With the
+datasheet gammas each channel gets its own datasheet toe; with scanner-fitted gammas (the `X5` presets) the
+Status M shapes of the single channels do not transfer, so the green curve is used for all three channels, placed
+on each channel's own density scale: the correction then depends on exposure only and cannot shift colours. The
+datasheet describes fresh film in a normal process measured with Status M filters, not your roll or your scanner,
+so compare both settings on your own scans.
 
 ## Building the Windows executable yourself
 

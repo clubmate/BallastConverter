@@ -387,6 +387,11 @@ FLOOR       = 3.204345703125e-05        # 1.05 / 32768, lower limit in 0x1000aa2
 # Films with a characteristic-curve file in the folder 'curves' (own addition, see build_luts / curve_correction)
 FILM_CURVES = {
     ('Kodak', 'Portra 400 (2026)'): 'kodak_portra_400.txt',
+    # The X5 presets share the datasheet curve: the toe/shoulder term is scaled to each preset's gammas (see
+    # curve_correction), and the toe of Portra 400 is nearly neutral (recherche/negicc, 2026-09-18).
+    ('Kodak', 'Portra 400 (X5 fit)'): 'kodak_portra_400.txt',
+    ('Kodak', 'Portra 400 (X5 neutral)'): 'kodak_portra_400.txt',
+    ('Kodak', 'Portra 400 (X5 balance)'): 'kodak_portra_400.txt',
 }
 
 _ICC_CACHE = {}
@@ -602,10 +607,15 @@ def build_luts(hists, total, gammas, in_curve="linear", p_black=P_BLACK, p_bpoin
     # Own addition: datasheet toe/shoulder, exactly 0 at both anchors. All channels or none, never a colour shift.
     use_curve = curve is not None and lo.min() > 0 and hi.min() > 0
     if use_curve:
+        # Datasheet gammas (gamma * slope = 1 in every channel): each channel gets its own datasheet toe/shoulder.
+        # Scanner-fitted gammas: the per-channel Status-M shapes do not transfer, and the toe of the film is nearly
+        # neutral for an RGB scanner (recherche/negicc), so the green curve is used for all three channels, placed
+        # on each channel's own density scale -> the term is a pure function of exposure, no colour shift.
+        neutral = bool(np.any(np.abs(g * curve["slope"] - 1.0) >= 0.02))
         for c in range(3):
             with np.errstate(divide="ignore"):
                 dens = -np.log10(lins[c][1:])
-            term = curve_correction(curve, c, dens, -np.log10(hi[c]), -np.log10(lo[c]))
+            term = curve_correction(curve, c, dens, -np.log10(hi[c]), -np.log10(lo[c]), g[c], neutral)
             luts[c, 1:] *= 10.0 ** term
             luts[c, 0] = luts[c, 1]
 
@@ -814,26 +824,36 @@ def load_film_curve(path):
     return cv
 
 
-def curve_correction(cv, c, dens, d_hi, d_lo):
+def curve_correction(cv, c, dens, d_hi, d_lo, gamma=None, neutral=False):
     """Toe/shoulder term of the datasheet curve for channel c, in log10 exposure, for scanner densities dens
     (array, D = -log10 of the linearized scanner value). d_hi = density of the black anchor (thinnest point),
     d_lo = density of the white anchor (densest point). The scan is placed on the datasheet axis so that the black
-    anchor sits at cv['anchor'][c] (half-slope point of the toe), density differences are taken 1:1 (Status M).
+    anchor sits at cv['anchor'][c] (half-slope point of the toe). Scanner density differences are converted to
+    datasheet (Status M) density with the factor gamma * datasheet slope: the preset gamma says how much log
+    exposure a scanner density step is worth, the datasheet slope how much Status-M density that exposure makes.
+    With gamma = 1/slope (the datasheet preset) the factor is 1, i.e. densities are taken 1:1 as before; a
+    scanner-fitted gamma (e.g. blue 1.95 instead of 1.57) moves the toe to where that scanner actually sees it.
     The term is the deviation of the curve's inverse from its straight line, minus the straight line through its
     values at the two anchors, so it is exactly 0 at both anchors and 0 outside of them: white and black stay where
-    the plain model puts them. Returned in log10 units, i.e. pos *= 10**term."""
-    logH, D = cv["logH"], cv["D"][c]
-    s, b, da, dmax = cv["slope"][c], cv["intercept"][c], cv["anchor"][c], cv["dmax"][c]
+    the plain model puts them. Returned in log10 units, i.e. pos *= 10**term.
+    neutral = use the green channel's curve for every channel (toe/shoulder as a function of exposure only, the
+    same for R, G and B); requires gamma. Used for scanner-fitted gammas, see build_luts."""
+    cc = 1 if neutral else c
+    logH, D = cv["logH"], cv["D"][cc]
+    s, b, da, dmax = cv["slope"][cc], cv["intercept"][cc], cv["anchor"][cc], cv["dmax"][cc]
     span = d_lo - d_hi
     if not (span > 1e-6):
         return np.zeros_like(dens)
+    kd = 1.0 if gamma is None else float(gamma) * s          # scanner density -> datasheet density of that curve
+    if not neutral and abs(kd - 1.0) < 0.02:
+        kd = 1.0                                               # datasheet preset: keep the 1:1 placement exactly
     def delta(dq):                                             # inverse curve minus its straight line
         dq = np.clip(dq, da, dmax)
         return np.interp(dq, D, logH) - (dq - b) / s
-    dsm = dens - d_hi + da                                     # scan density -> datasheet density
+    dsm = (dens - d_hi) * kd + da                              # scan density -> datasheet density
     t = np.clip((dens - d_hi) / span, 0.0, 1.0)
     d0 = delta(np.array([da]))[0]
-    d1 = delta(np.array([d_lo - d_hi + da]))[0]
+    d1 = delta(np.array([span * kd + da]))[0]
     term = delta(dsm) - d0 - (d1 - d0) * t
     term[(dens < d_hi) | (dens > d_lo)] = 0.0
     return term

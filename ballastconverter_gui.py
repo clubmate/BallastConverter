@@ -99,7 +99,7 @@ TIPS = {
     "curve": "Applies the toe and shoulder of the film's characteristic curve from the manufacturer's datasheet on top "
              "of the three gammas. White and black point stay exactly where they are; only the shape in between "
              "changes, mostly in the deep shadows. Off = plain single-gamma model. Available only for films with "
-             "curve data (currently Kodak/Portra 400 (2026)), not with \"Manual\".",
+             "curve data (currently the Kodak/Portra 400 presets), not with \"Manual\".",
     "incurve": "How the scanner encoded the values. A scanner profile (ICC) linearizes per channel via the "
                "curves of the profile; for 3f/fff the profile recorded in the file is chosen automatically. "
                "\"linear\" for linearly scanned TIFFs.",
