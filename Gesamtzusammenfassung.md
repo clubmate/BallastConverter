@@ -264,7 +264,15 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
 - Test an den 10 Paaren (Region = Lightroom-Beschnitt): 5×5 hebt Blau gegen Grün um 0,16 Blenden (0,07 … 0,27), das sind
   40 % der Lightroom-Korrektur von +0,41; Rest +0,25. Streuung der nötigen Blau-Korrektur 0,19 → 0,14. Korrelation
   Kornwirkung ↔ Lightroom-Korrektur je Bild 0,85. 7×7 bringt kaum mehr. Rot −0,04 (15-55: −0,12, falsche Richtung).
-- Offen: der Rest von ≈ 0,25 Blenden Blau, der mit der Kornwirkung mitläuft (Steigung ≈ 2,5).
+- Form des Rests: entsteht ganz in der obersten Blende (B/G −0,07 unter Weiß → −0,28 bei −1 Blende), darunter bis
+  −5 Blenden parallel. Also kein Gammafehler: die Gamma-Geraden reichen von −1 bis etwa −6 Blenden; Abweichungen nur
+  ganz oben (Blau) und ganz unten (Rot +0,2 unter −7 Blenden).
+- Geprüft und als Ursache des Mittelwerts verworfen: Polygon-TRC des Profils. Sie liegt zwischen den Stützstellen bis
+  7 %, unter Code 0,1 bis 45 % über einer glatten Kurve, und die Blau-Weißanker liegen dort; glatte Kurve ändert den
+  Mittelwert aber nicht (0,13 statt 0,14), nur je Bild −0,2 … +0,16 Blenden (Streuung des Rests 0,14 → 0,10).
+- Motivanteil sichtbar: bei 3 von 10 Bildern sitzen Rot- und Blau-Anker auf verschiedenen, farbigen Stellen (Haut,
+  rote Gegenstände gegen Weiß/Himmel). Lightrooms Weißabgleich lässt Weiß weiß, die Paare können deshalb nicht
+  entscheiden, wie die hellsten Stellen „richtig“ aussähen. Trennen kann das nur ein Keil/IT8 auf Film.
 
 ---
 
