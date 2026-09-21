@@ -47,6 +47,7 @@ ACCENT    = "#57c8ff"
 
 MANUAL = "Manual"
 CURVE_TEXT = "Datasheet toe/shoulder curve"
+GRAIN_TEXT = "Low-grain anchors (white/black point from 5×5 means)"
 CURVE_TEXT_NA = "Datasheet toe/shoulder curve (no data for this film)"
 
 
@@ -115,6 +116,10 @@ TIPS = {
     "bp": "Share of the thinnest pixels in the green frame that is skipped when setting the black anchor. "
           "The thinnest point is set to neutral black per channel (removes the orange mask); these "
           "pixels end up below black. Default 0.1 %.",
+    "grain": "Takes the white and black point from the mean of small pixel blocks instead of single pixels. At full "
+             "scan resolution the 0.1 % extreme pixels are film grain, mostly in the blue channel; that pulls the blue "
+             "white anchor and leaves a constant yellow cast (about 0.15 stops on Portra 400 / Flextight X5). Only the "
+             "two anchors change, the image itself is not smoothed. Off = single pixels as in the ColorPerfect plugin.",
     "run": "Converts the whole scan at full resolution and writes the output file. Only possible once a "
            "frame has been set on the preview.",
 }
@@ -175,6 +180,7 @@ class App(tk.Tk):
         self.worker = None
         self.cancel_flag = threading.Event()
         self.preview_photo = None
+        self.prev_gcodes = None        # block means of the negative as codes, for the low-grain anchors of the preview
         self.prev_codes = None         # downscaled negative as codes (HxWx3 uint16), basis of the live preview
         self.loaded_path = None
         self.last_input = None         # scan the current output name belongs to (see _suggest_output)
@@ -318,6 +324,10 @@ class App(tk.Tk):
         e_bp = ttk.Entry(uf, textvariable=self.v_bp, width=5)
         e_bp.pack(side="left")
         Tooltip(TIPS["bp"], l_bp, e_bp)
+        self.v_grain = tk.BooleanVar(value=False)
+        cb_grain = ttk.Checkbutton(c, text=GRAIN_TEXT, variable=self.v_grain, command=self._setting_changed)
+        cb_grain.grid(row=2, column=0, columnspan=3, sticky="w", **rowpad)
+        Tooltip(TIPS["grain"], cb_grain)
 
         # Statistics region: set only via the frame on the preview (no numeric fields)
         self.v_scrop = [tk.StringVar() for _ in range(4)]
@@ -451,7 +461,7 @@ class App(tk.Tk):
             if not (0 < wp <= 50 and 0 < bp <= 50):
                 return None
             return "_" + cn.settings_name(film, gammas, curve, -self._num(self.v_expo, "Exposure", empty=0.0),
-                                          wp / 100.0, bp / 100.0) + ".tif"
+                                          wp / 100.0, bp / 100.0, self._grain()) + ".tif"
         except (ValueError, cn.ConversionError):
             return None
 
@@ -608,6 +618,10 @@ class App(tk.Tk):
         self.gf.grid_remove()
         self._refresh_output_name()
 
+    def _grain(self):
+        """Block size of the low-grain anchors for cn.convert: cn.GRAIN_BLOCK when ticked, 1 = off."""
+        return cn.GRAIN_BLOCK if self.v_grain.get() else 1
+
     def _film_curve(self):
         """Curve file of the selected film, None for 'Manual' or films without curve data."""
         film = self.v_film.get()
@@ -681,7 +695,7 @@ class App(tk.Tk):
             crop=None, stats_crop=self._four(self.v_scrop),
             embed_icc="auto",
             film_curve=self._film_curve() if self.v_curve.get() else None,
-            film=film,
+            film=film, grain=self._grain(),
         )
         if not (0 < p["p_black"] <= 0.5 and 0 < p["p_bpoint"] <= 0.5):
             raise ValueError("White point and black point must be between 0 and 50 (percent)")
@@ -749,8 +763,11 @@ class App(tk.Tk):
             if s % 2 == 0:                       # odd step: samples both phases of a 2x2 pixel pattern
                 s += 1                           # (Flextight 3f scans show one; an even step biases the anchors)
             codes = cn.to_codes(np.asarray(img[::s, ::s]))
+            # block means for the low-grain anchors, computed once so that the checkbox switches without reloading
+            gs = max(s, cn.GRAIN_BLOCK)
+            gcodes = cn.block_mean_codes(img, cn.GRAIN_BLOCK, gs)
             del img
-            self.q.put(("loaded", (path, codes, w, h, s)))
+            self.q.put(("loaded", (path, codes, w, h, s, gcodes, gs)))
         except cn.ConversionError as e:
             self.q.put(("load_error", (path, str(e))))
         except BaseException as e:                   # SystemExit included: a silent thread death leaves the GUI stuck
@@ -765,6 +782,16 @@ class App(tk.Tk):
         s = self.prev_meta["subsample"]
         up = lambda v: -(-max(v, 0) // s)
         return (up(y0), max(y1, 0) // s, up(x0), max(x1, 0) // s)
+
+    def _preview_grain_stats(self, rect):
+        """Block means (low-grain anchors) inside the frame: only blocks that lie completely in it."""
+        g, gs, b = self.prev_gcodes, self.prev_meta["gstep"], cn.GRAIN_BLOCK
+        if not rect:
+            return g
+        x0, y0, x1, y1 = rect
+        up = lambda v: -(-max(v, 0) // gs)
+        last = lambda v: max((max(v, 0) - b) // gs + 1, 0)
+        return g[up(y0):last(y1), up(x0):last(x1)]
 
     def _schedule_preview(self):
         """Recompute the preview after a short pause (coalesces rapid input)."""
@@ -784,9 +811,10 @@ class App(tk.Tk):
             return                                  # incomplete input: keep the old preview
         stats = self._preview_stats(p["stats_crop"])
         try:
+            gstats = self._preview_grain_stats(p["stats_crop"]) if p["grain"] > 1 else None
             arr, info = cn.convert_codes(self.prev_codes, p["gammas"], p["in_curve"], p["out_curve"],
                                          p["p_black"], p["p_bpoint"], p["black"], stats=stats, bits=8,
-                                         film_curve=p["film_curve"])
+                                         film_curve=p["film_curve"], stats_codes=gstats)
         except Exception as e:
             self._log(f"Preview: {e}")
             return
@@ -802,11 +830,12 @@ class App(tk.Tk):
                 elif kind == "prog":
                     self.pb["value"] = int(val * 1000)
                 elif kind == "loaded":
-                    path, codes, w, h, s = val
+                    path, codes, w, h, s, gcodes, gs = val
                     if path != self.loaded_path:
                         continue                    # a different file was chosen in the meantime
                     self.prev_codes = codes
-                    self.prev_meta = dict(subsample=s, off=(0, 0), W=w, H=h)
+                    self.prev_gcodes = gcodes
+                    self.prev_meta = dict(subsample=s, gstep=gs, off=(0, 0), W=w, H=h)
                     self._log(f"loaded: {w}x{h}, preview {codes.shape[1]}x{codes.shape[0]}")
                     pr, self.pending_rect = self.pending_rect, None
                     if pr and pr[0] == path and pr[1] == w and pr[2] == h:
@@ -942,6 +971,7 @@ class App(tk.Tk):
         return dict(
             input=self.v_in.get(), output=self.v_out.get(), output_dir=self.out_dir or "", film=self.v_film.get(),
             gammas=[self.v_gr.get(), self.v_gg.get(), self.v_gb.get()], datasheet_curve=bool(self.v_curve.get()),
+            low_grain=bool(self.v_grain.get()),
             in_curve=self._portable_icc(self._in_curve()), out_profile=self._portable_icc(self._out_profile_path() or ""),
             exposure=self.v_expo.get(), white_pct=self.v_wp.get(), black_pct=self.v_bp.get(),
             stats_crop=[v.get() for v in self.v_scrop],
@@ -974,6 +1004,7 @@ class App(tk.Tk):
             if self.v_film.get() == MANUAL:
                 for v, x in zip((self.v_gr, self.v_gg, self.v_gb), s.get("gammas", ["", "", ""])): v.set(x)
             self.v_curve.set(bool(s.get("datasheet_curve", False)))
+            self.v_grain.set(bool(s.get("low_grain", False)))
             ic = s.get("in_curve", "linear")
             if ic.startswith("icc:"):
                 ic = "icc:" + cn.resolve_icc(ic[4:])

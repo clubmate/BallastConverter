@@ -259,8 +259,12 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
   Kornausreißer. Perzentil an 3×3-Blockmitteln statt am Pixel: Positiv R +0,02 / G +0,06 / B +0,19 Blenden, also
   Blau − Grün +0,13 (5×5: +0,15), je Bild 0,06 … 0,29. Das ist etwa die Hälfte des Stichs; der Rest bleibt
   motivabhängig. Korrigiert 5.6 („draußen oft Himmel“): ein großer Teil ist Korn, nicht Motiv.
-- Abhilfe (noch nicht eingebaut): Perzentile an einem kornarmen Bild bestimmen (ungerades Blockmittel vor dem
-  Histogramm).
+- Abhilfe eingebaut (2026-09-21): Option „Low-grain anchors“ (GUI-Checkbox, `--grain [N]`, Standard 5×5, Dateiname
+  `_lg5`); beide Anker aus Blockmitteln, Bild selbst unverändert, aus = bitidentisch.
+- Test an den 10 Paaren (Region = Lightroom-Beschnitt): 5×5 hebt Blau gegen Grün um 0,16 Blenden (0,07 … 0,27), das sind
+  40 % der Lightroom-Korrektur von +0,41; Rest +0,25. Streuung der nötigen Blau-Korrektur 0,19 → 0,14. Korrelation
+  Kornwirkung ↔ Lightroom-Korrektur je Bild 0,85. 7×7 bringt kaum mehr. Rot −0,04 (15-55: −0,12, falsche Richtung).
+- Offen: der Rest von ≈ 0,25 Blenden Blau, der mit der Kornwirkung mitläuft (Steigung ≈ 2,5).
 
 ---
 
@@ -372,6 +376,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
   `recherche/`, `TODO.md`, Scans und Bilder sind gitignored.
 - Live-Vorschau (einmal laden, 1600 px, LUT je Kanal), Convert erst nach dem grünen Statistikrahmen.
 - Standard: Perzentile 0,1 %, Belichtung 0, Ausgabe 16 Bit mit TRC von AdobeRGB1998.icc, Profil eingebettet.
+- Option „Low-grain anchors“ (Checkbox / `--grain`, aus = Standard): Anker aus 5×5-Blockmitteln, siehe 5.8.
 - Ausgabename `<scan>_<film>_toe_ev-05_w01_b05.tif`; Einstellungen auch in der TIFF-ImageDescription.
 - Bewusst entfernt: Film-Gamma-Faktor, CC-Felder, 8 Bit, Schwarzpunkt-Checkbox, Abbrechen, Theme-Umschalter.
 - Rezept des ersten Ergebnisses (reproduziert `18-29_16_positiv_portra400.tif` bitidentisch):
@@ -406,8 +411,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Auto-Pipette im Konverter (Entscheidung des Nutzers: Pipette in Lightroom).
 
 **Offen**
-1. Perzentile kornarm bestimmen (Blockmittel vor dem Histogramm) und an den 10 Bildpaaren prüfen, wie viel Temp/Tint
-   dann noch nötig ist. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
+1. Rest-Blaustich (≈ 0,25 Blenden nach „Low-grain anchors“) klären; Option am Vollbild in Lightroom beurteilen. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
 2. Filmträger bzw. Filmrand **je Rolle** als Anker (TODO 3; VueScan/OpenEnlarge-Art), ggf. Noritsu-Trägerschätzung aus
    dem Histogramm, wenn kein Rand mitgescannt ist.
 3. Wahre Eingangskurve des X5 messen: Stufenkeil/IT8 als 3F, oder Graukeil vom kalibrierten Monitor auf Film

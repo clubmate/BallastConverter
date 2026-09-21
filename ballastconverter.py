@@ -377,6 +377,7 @@ FILMS = {
 # ---------------------------------------------------------------------------
 NBINS       = 0x8000                    # 32768 histogram bins (Photoshop 16-bit codes 0..32767)
 P_BLACK     = 0.001                     # g2+0x540  "Black" percentile  (white anchor; plugin default 0.005, here 0.1 %)
+GRAIN_BLOCK = 5                         # own addition: block size of the low-grain anchors (option, default off)
 P_BPOINT    = 0.001                     # g2+0x628  "BPoint" percentile (black anchor; plugin default 0.005, here 0.1 %)
 FLOOR       = 3.204345703125e-05        # 1.05 / 32768, lower limit in 0x1000aa20
 
@@ -931,10 +932,49 @@ def film_short_name(film):
     return "-".join(parts) or "film"
 
 
-def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT):
+def grain_block(n):
+    """Block size of the low-grain anchors: 0/1/None/False = off (1), True = GRAIN_BLOCK, even sizes are raised to the
+    next odd one (2x2 pixel pattern of Flextight scans, see the subsample step)."""
+    n = GRAIN_BLOCK if n is True else int(n or 1)
+    if n < 1:
+        raise ConversionError("grain block size must be 1 (off) or larger")
+    return n + 1 if n > 1 and n % 2 == 0 else n
+
+
+def block_mean_codes(img, block, step=None, chunk_rows=64):
+    """Codes (see to_codes) of the block x block mean values of img, one block every `step` pixels (default: block =
+    non-overlapping). Own addition for the low-grain anchors: the 0.1 % percentiles of single pixels are grain
+    outliers, mostly in the blue channel (densest layer), which makes the white anchor too dense there and the
+    positive yellow; the mean of a small block keeps the image detail but not the grain. The mean is taken on the
+    file values, the difference to a mean in linear light is negligible at grain amplitude."""
+    step = step or block
+    if step < block:
+        raise ConversionError("block_mean_codes: step must not be smaller than the block")
+    if img.ndim == 2:
+        img = img[..., None]
+    h = (img.shape[0] - block) // step + 1
+    w = (img.shape[1] - block) // step + 1
+    if h < 1 or w < 1:
+        return np.empty((0, 0, 3), dtype=np.uint16)
+    parts = []
+    for r0 in range(0, h, chunk_rows):
+        r1 = min(h, r0 + chunk_rows)
+        a = np.asarray(img[r0 * step:(r1 - 1) * step + block, :(w - 1) * step + block, :3])
+        acc = np.zeros((r1 - r0, w, a.shape[2]), dtype=np.float64)
+        for dy in range(block):
+            for dx in range(block):
+                acc += a[dy::step, dx::step][:r1 - r0, :w]
+        m = acc / (block * block)
+        if m.shape[2] == 1:
+            m = m[..., 0]                            # grayscale: to_codes stacks it to three channels
+        parts.append(to_codes(np.rint(m).astype(img.dtype.newbyteorder("=") if img.dtype.kind == "u" else np.uint16)))
+    return np.concatenate(parts, axis=0)
+
+
+def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT, grain=1):
     """Conversion settings as file-name tokens, e.g. 'Portra400-2026_toe_ev-05_w01_b05': film short name
     (or 'g<R>-<G>-<B>' without a film), 'toe' with the datasheet curve, 'ev<+-x>' for an exposure other than 0
-    (exposure = -black), white and black percentile in percent. Numbers are written without the decimal point
+    (exposure = -black), white and black percentile in percent, 'lg<n>' with low-grain anchors (block size n). Numbers are written without the decimal point
     (0.1 -> 01, 0.5 -> 05, 1 -> 1, 1.84 -> 184) so that the name contains no dot besides the extension.
     Only letters, digits, '+', '-' and '_'."""
     def num(x, fmt="g"):
@@ -947,11 +987,13 @@ def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P
         tokens.append("ev" + num(exposure, "+g"))
     tokens.append("w" + num(round(p_black * 100, 4)))
     tokens.append("b" + num(round(p_bpoint * 100, 4)))
+    if grain_block(grain) > 1:
+        tokens.append(f"lg{grain_block(grain)}")
     return "_".join(tokens)
 
 
 def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT,
-                         in_curve="linear", out_curve="2.2", stats_crop=None):
+                         in_curve="linear", out_curve="2.2", stats_crop=None, grain=1):
     """One-line summary of the conversion settings, stored in the TIFF's ImageDescription tag (7-bit ASCII)."""
     parts = [f"BallastConverter {version()}"]
     if film:
@@ -962,6 +1004,8 @@ def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_
     parts.append(f"exposure={round(-float(black), 4) + 0.0:+g}")
     parts.append(f"white={round(p_black * 100, 4):g}%")
     parts.append(f"black={round(p_bpoint * 100, 4):g}%")
+    if grain_block(grain) > 1:
+        parts.append(f"low_grain_anchors={grain_block(grain)}x{grain_block(grain)}")
     parts.append(f"in_curve={in_curve}")
     parts.append(f"out_curve={out_curve}")
     if stats_crop:
@@ -972,11 +1016,13 @@ def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_
 def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
             p_black=P_BLACK, p_bpoint=P_BPOINT, black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True,
             bits=16, crop=None, stats_crop=None, embed_icc="auto", subsample=1,
-            log=print, progress=None, cancel=None, film_curve=None, film=None):
+            log=print, progress=None, cancel=None, film_curve=None, film=None, grain=1):
     """
     Complete conversion negative -> positive, writes output_path.
     film_curve          : None, or path of a characteristic-curve file (see load_film_curve): datasheet toe/shoulder
     film                : film name, only for the settings summary in the TIFF's ImageDescription
+    grain               : block size of the low-grain anchors (see block_mean_codes), 1 = off = percentiles of single
+                          pixels as in the plugin. Only the two anchors change, the output pixels are not smoothed.
     log(text)           : messages
     progress(frac)      : 0..1 (histogram = first half, writing = second half)
     cancel()            : returns True if the conversion should be aborted
@@ -996,6 +1042,7 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
     if not (0 < p_black <= 0.5 and 0 < p_bpoint <= 0.5):
         raise ConversionError("percentiles must be between 0 and 0.5 (0 %..50 %)")
     curve = load_film_curve(film_curve) if film_curve else None
+    grain = grain_block(grain)
     img = read_image(input_path)
     if crop:
         x0, y0, x1, y1 = crop
@@ -1003,11 +1050,13 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
     if subsample > 1 and subsample % 2 == 0:
         subsample += 1                         # odd step: samples both phases of a 2x2 pixel pattern equally
         log(f"subsample raised to {subsample} (even steps bias the percentiles on scans with a checkerboard pattern)")
+    full = img                                  # low-grain anchors average neighbouring pixels of the unsampled image
     if subsample > 1:
         img = img[::subsample, ::subsample]
     H, W = img.shape[0], img.shape[1]
     log(f"Image {W}x{H}, gammas {tuple(round(g, 4) for g in gammas)}, input curve {in_curve}"
-        + (f", datasheet curve {os.path.basename(curve['path'])}" if curve else ""))
+        + (f", datasheet curve {os.path.basename(curve['path'])}" if curve else "")
+        + (f", low-grain anchors {grain}x{grain}" if grain > 1 else ""))
     stats_img = img
     if stats_crop:
         x0, y0, x1, y1 = stats_crop
@@ -1019,6 +1068,13 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         if stats_img.size == 0:
             raise ConversionError("Statistics region lies outside the image")
     chunk = 256
+    if grain > 1:
+        region = full
+        if stats_crop:                             # x0..y1 are relative to the cropped image by now
+            region = full[max(y0, 0):max(y1, 0), max(x0, 0):max(x1, 0)]
+        stats_img = block_mean_codes(region, grain, max(grain, subsample))
+        if stats_img.size == 0:
+            raise ConversionError("Statistics region is smaller than one block of the low-grain anchors")
 
     hists = np.zeros((3, NBINS), dtype=np.float64)
     total = 0
@@ -1026,7 +1082,7 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
     for y0 in range(0, n_stats, chunk):
         if cancel and cancel():
             return None
-        codes = to_codes(np.asarray(stats_img[y0:y0 + chunk]))
+        codes = stats_img[y0:y0 + chunk] if grain > 1 else to_codes(np.asarray(stats_img[y0:y0 + chunk]))
         for c in range(3):
             hists[c] += np.bincount(codes[..., c].ravel(), minlength=NBINS)
         total += codes.shape[0] * codes.shape[1]
@@ -1055,7 +1111,7 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         log(f"  embedded profile: {icc_path}")
 
     description = settings_description(film, gammas, bool(film_curve), black, p_black, p_bpoint,
-                                       in_curve, os.path.basename(str(out_curve)), stats_crop)
+                                       in_curve, os.path.basename(str(out_curve)), stats_crop, grain)
     try:
         out = tifffile.memmap(output_path, shape=(H, W, 3), dtype=np.uint16 if bits == 16 else np.uint8,
                               photometric="rgb", description=description, extratags=extratags)
@@ -1109,12 +1165,16 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
 
 
 def convert_codes(codes, gammas, in_curve="linear", out_curve="2.2", p_black=P_BLACK, p_bpoint=P_BPOINT,
-                  black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True, stats=None, bits=8, film_curve=None):
+                  black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True, stats=None, bits=8, film_curve=None,
+                  stats_codes=None):
     """Conversion of an already loaded image (codes 0..32767, HxWx3), for the preview in the GUI.
     stats: (y0, y1, x0, x1) region in pixels of this image for the percentiles, None = whole image.
     film_curve: None or path of a characteristic-curve file (datasheet toe/shoulder, see load_film_curve).
+    stats_codes: None, or the codes to take the percentiles from instead (already cut to the region; low-grain
+    anchors: block means from block_mean_codes), `stats` is ignored then.
     Returns (output image uint8/uint16, info)."""
-    stats_codes = codes if stats is None else codes[stats[0]:stats[1], stats[2]:stats[3]]
+    if stats_codes is None:
+        stats_codes = codes if stats is None else codes[stats[0]:stats[1], stats[2]:stats[3]]
     if stats_codes.size == 0:
         raise ConversionError("Statistics region lies outside the image")
     if not (0 < p_black <= 0.5 and 0 < p_bpoint <= 0.5):
@@ -1155,6 +1215,7 @@ def main():
     ap.add_argument("--embed-icc", default="auto", help="embed ICC profile: path, 'none' or 'auto' (default: with --out-curve icc: that profile, with 2.2 profiles/AdobeRGB1998.icc)")
     ap.add_argument("--subsample", type=int, default=1, help="only every n-th pixel (fast preview)")
     ap.add_argument("--datasheet-curve", action="store_true", help="apply the toe/shoulder of the film's datasheet characteristic curve on top of the gammas (only films marked [curve] in --list-films, needs --film)")
+    ap.add_argument("--grain", type=int, nargs="?", const=GRAIN_BLOCK, default=1, metavar="N", help=f"low-grain anchors: take the white/black percentiles from NxN block means instead of single pixels (default N = {GRAIN_BLOCK}, odd; without the option: off). Film grain, mostly in blue, otherwise pulls the white anchor and leaves a yellow cast; the output pixels are not smoothed")
     ap.add_argument("--list-films", action="store_true")
     ap.add_argument("--version", action="version", version=f"BallastConverter {version()}")
     a = ap.parse_args()
@@ -1177,7 +1238,7 @@ def main():
                 raise ConversionError("--datasheet-curve needs --film with a film marked [curve] in --list-films")
         convert(a.input, a.output, gammas, a.in_curve, a.out_curve, a.p_black, a.p_bpoint, a.black, tuple(a.cc),
                 not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample, film_curve=film_curve,
-                film=a.film if not a.gammas else None)
+                film=a.film if not a.gammas else None, grain=a.grain)
     except ConversionError as e:
         raise SystemExit(f"error: {e}")
 

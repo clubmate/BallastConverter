@@ -48,6 +48,8 @@ classic theme.
    clipped; pull the white point up in Photoshop afterwards.
 7. **White point / Black point**: the percentage of the densest and thinnest pixels inside the frame that is
    skipped when the anchors are set (protection against dust and scratches). Default 0.1.
+   **Low-grain anchors** (optional) takes both anchors from the means of 5×5 pixel blocks instead of single pixels,
+   see below; the file name gets `lg5`.
 8. **Convert** writes the full-resolution 16-bit TIFF.
 
 The preview updates live with every change. Every control has a tooltip.
@@ -70,6 +72,7 @@ python ballastconverter.py scan.tif positive.tif --gammas 1.84 1.81 1.57 --out-c
 
 `--black 1` equals Exposure −1 in the GUI. `--p-black` and `--p-bpoint` are the white and black point
 percentiles as fractions (0.001 = 0.1 %). `--stats-crop` is the frame in pixels of the original image.
+`--grain` is the low-grain anchors checkbox (`--grain 3` for another block size).
 `--datasheet-curve` is the curve checkbox of the GUI; it needs `--film` with a film marked `[curve]` in
 `--list-films`. `--help` lists everything.
 
@@ -105,6 +108,14 @@ Status M shapes of the single channels do not transfer, so the green curve is us
 on each channel's own density scale: the correction then depends on exposure only and cannot shift colours. The
 datasheet describes fresh film in a normal process measured with Status M filters, not your roll or your scanner,
 so compare both settings on your own scans.
+
+**Low-grain anchors** (optional): in a high-resolution scan the most extreme 0.1 % of the pixels are film grain,
+not image content, and the blue channel (densest layer of a colour negative) has the most of it. The white anchor of
+blue then sits too dense and the whole positive gets a constant yellow cast. Measured on ten Portra 400 frames from
+a Flextight X5 (11 000 px long side): the option brings blue up by 0.16 stops relative to green (0.07–0.27 per
+frame), about 40 % of the white-balance correction these frames needed in Lightroom, and it follows the correction
+frame by frame (correlation 0.85). Only the two anchors change; the image is not smoothed. Unticked, the output is
+bit-identical to before. On low-resolution scans a 5×5 block can swallow small real highlights, so compare.
 
 ## Building the Windows executable yourself
 
