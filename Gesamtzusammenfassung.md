@@ -247,6 +247,21 @@ Entweder nicht neutral oder Himmelslicht im Schatten. Der Fit ist robust gegen W
 Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 #4. Klären können das nur Bildpaare
 (Scan + eigene fertige Korrektur).
 
+### 5.8 Bildpaare Konverter → Lightroom (2026-09-21)
+10 Scans, Preset X5 neutral, Weiß/Schwarz 0,1 %; Lightroom-Fassung nur mit Temp/Tint (Mittel −7 / +14), sonst nichts.
+- Lightrooms Weißabgleich auf ein TIFF ist kein reiner Faktor: konstant bis −3 Blenden unter Weiß, in den obersten
+  zwei Blenden läuft er auf ca. 40 % aus.
+- Konverter-Ausgang: Blau fehlt von −5 bis −1 Blenden **konstant** ≈ 0,27 Blenden → Ankerfehler, kein Gammafehler.
+  Blau-Gamma 1,95 bestätigt; Rot höchstens +2 % (im Fehler). Kein Anlass für Rot 1,80/1,90.
+- Lightroom-Fassung: Mitten neutral, Lichter ≈ 0,1 Blende grünlich-gelb (der Teil, den der auslaufende Weißabgleich
+  nicht erreicht), tiefste Tiefen (unter −7 Blenden) Rot +0,2 Blenden, schon im Konverter-Ausgang.
+- **Ursache gefunden:** Das 0,1-%-Perzentil des Weißankers wird am Einzelpixel bestimmt; im Blaukanal sind das
+  Kornausreißer. Perzentil an 3×3-Blockmitteln statt am Pixel: Positiv R +0,02 / G +0,06 / B +0,19 Blenden, also
+  Blau − Grün +0,13 (5×5: +0,15), je Bild 0,06 … 0,29. Das ist etwa die Hälfte des Stichs; der Rest bleibt
+  motivabhängig. Korrigiert 5.6 („draußen oft Himmel“): ein großer Teil ist Korn, nicht Motiv.
+- Abhilfe (noch nicht eingebaut): Perzentile an einem kornarmen Bild bestimmen (ungerades Blockmittel vor dem
+  Histogramm).
+
 ---
 
 ## 6. Wie Laborscanner umwandeln
@@ -378,6 +393,8 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Ein Gamma je Kanal reicht für die Balance (Gerade ±0,03 D).
 - Eigene und fremde 3F sind gleich kodiert; kein Offset.
 - Eigener X5: 2×2-Schachbrett → nie mit geradem Schritt unterabtasten.
+- Der konstante Gelb-Grün-Stich ist ein Faktor (Anker), kein Gamma; etwa zur Hälfte Filmkorn im Blau-Weißanker (5.8).
+- Gammas von „X5 neutral“ (1,70/1,811/1,95) durch Bildpaare bestätigt (nur Temp/Tint nötig, kein helligkeitsabhängiger Stich in den Mitten).
 
 **Verworfen**
 - „3F ist linear“ / „Gamma 2,2 bzw. 1,8 je Plattform“ / „nur Rot ist gammakodiert“.
@@ -389,7 +406,8 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Auto-Pipette im Konverter (Entscheidung des Nutzers: Pipette in Lightroom).
 
 **Offen**
-1. Am Vollbild in Lightroom entscheiden: Rot 1,70 / 1,80 / 1,90 (/ 1,81), und die Fuß/Schulter-Option.
+1. Perzentile kornarm bestimmen (Blockmittel vor dem Histogramm) und an den 10 Bildpaaren prüfen, wie viel Temp/Tint
+   dann noch nötig ist. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
 2. Filmträger bzw. Filmrand **je Rolle** als Anker (TODO 3; VueScan/OpenEnlarge-Art), ggf. Noritsu-Trägerschätzung aus
    dem Histogramm, wenn kein Rand mitgescannt ist.
 3. Wahre Eingangskurve des X5 messen: Stufenkeil/IT8 als 3F, oder Graukeil vom kalibrierten Monitor auf Film
@@ -412,6 +430,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 | `recherche/3f_Analyse.md` | 3F-Format, FlexColor-Gamma/Midtone, Export-A/B-Test |
 | `recherche/FlexColor_Portra_Setup.md` | NC/VC-Setups |
 | `recherche/gammafit/Auswertung.md` (+ Skripte, `*.txt`, Kontaktbögen, `kandidaten/`) | Gamma-Fit, Linearisierungen, Neutralflächen, Stich |
+| `recherche/bildpaare/Auswertung.md` (+ Skripte) | Bildpaare Konverter → Lightroom, Korn im Weißanker |
 | `recherche/alternativscans/Auswertung.md` | Labor-3F, Offset, Noritsu/Sigma, Schachbrett |
 | `recherche/Frontier_Umwandlung.md`, `recherche/frontier/` | Fuji-Patente, Tests, Prototyp |
 | `recherche/Noritsu_Umwandlung.md`, `recherche/noritsu/` | Noritsu-Patente, Nachbau |
