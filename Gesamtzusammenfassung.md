@@ -273,6 +273,9 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
 - Motivanteil sichtbar: bei 3 von 10 Bildern sitzen Rot- und Blau-Anker auf verschiedenen, farbigen Stellen (Haut,
   rote Gegenstände gegen Weiß/Himmel). Lightrooms Weißabgleich lässt Weiß weiß, die Paare können deshalb nicht
   entscheiden, wie die hellsten Stellen „richtig“ aussähen. Trennen kann das nur ein Keil/IT8 auf Film.
+- Filmrand als Farbanker, jetzt gegen die echten Korrekturen getestet (Filmkonstante k_c auf (Rand/T)^g): nötige
+  Balance streut R 0,19 / B 0,37 Blenden, gegen 0,16 / 0,14 mit kornarmen Perzentilen → klar schlechter, bestätigt 5.6.
+  Rollenweise Anker nicht prüfbar (10 Scans aus 10 Rollen).
 
 ---
 
