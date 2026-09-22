@@ -273,6 +273,14 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
 - Motivanteil sichtbar: bei 3 von 10 Bildern sitzen Rot- und Blau-Anker auf verschiedenen, farbigen Stellen (Haut,
   rote Gegenstände gegen Weiß/Himmel). Lightrooms Weißabgleich lässt Weiß weiß, die Paare können deshalb nicht
   entscheiden, wie die hellsten Stellen „richtig“ aussähen. Trennen kann das nur ein Keil/IT8 auf Film.
+- **Bestätigung am Nutzer-Ergebnis (2026-09-22):** die 10 Scans mit „Low-grain anchors“ 5×5 konvertiert, in
+  Lightroom erneut nur Temp/Tint gesetzt. Tatsächliche Wirkung in den Dateien: Blau − Grün +0,16, Rot − Grün −0,04
+  Blenden, konstant über die Helligkeit, genau wie im Test. Nötige Blau-Korrektur halbiert: +0,42 → +0,21 Blenden
+  (Temp im Mittel −7 → −1, Tint +14 → +12); der Nutzer nahm sogar 0,05 mehr zurück als die Option bewirkt.
+  Streuung zwischen den Bildern bleibt 0,17 – die vier Bilder mit dem größten Rest sind dieselben (Motivanteil).
+  Nebenbefund: Lightrooms Temp/Tint auf ein TIFF ist linear in Blenden (Restfehler 0,01–0,02):
+  R − G = 0,0152·Temp + 0,0064·Tint, B − G = −0,0329·Temp + 0,0141·Tint; für Rückmeldungen reichen also die XMP-Werte.
+  Wiederholung der Helligkeitsanalyse mit 5×5-Blöcken: gleiches Ergebnis wie mit 15×15.
 - Filmrand als Farbanker, jetzt gegen die echten Korrekturen getestet (Filmkonstante k_c auf (Rand/T)^g): nötige
   Balance streut R 0,19 / B 0,37 Blenden, gegen 0,16 / 0,14 mit kornarmen Perzentilen → klar schlechter, bestätigt 5.6.
   Rollenweise Anker nicht prüfbar (10 Scans aus 10 Rollen).
@@ -422,7 +430,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Auto-Pipette im Konverter (Entscheidung des Nutzers: Pipette in Lightroom).
 
 **Offen**
-1. Rest-Blaustich (≈ 0,25 Blenden nach „Low-grain anchors“) klären; Option am Vollbild in Lightroom beurteilen. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
+1. Rest-Blaustich (≈ 0,21 Blenden nach „Low-grain anchors“, am Nutzer-Ergebnis bestätigt; motivabhängig, dieselben vier Bilder) klären. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
 2. Filmträger bzw. Filmrand **je Rolle** als Anker (TODO 3; VueScan/OpenEnlarge-Art), ggf. Noritsu-Trägerschätzung aus
    dem Histogramm, wenn kein Rand mitgescannt ist.
 3. Wahre Eingangskurve des X5 messen: Stufenkeil/IT8 als 3F, oder Graukeil vom kalibrierten Monitor auf Film
