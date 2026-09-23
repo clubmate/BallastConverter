@@ -388,8 +388,10 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 - **Geprüft (2026-09-23, Auswertung Abschnitt 12):** die weiche Schulter macht die hellsten Neutralen +0,1 … +0,2
   Blenden blau (voller Balance-Faktor bis Weiß), Abstand zu Lightroom in den obersten Blenden 0,10 → 0,12–0,18:
   verworfen. Besser ist Lightrooms eigene Form, die Balance in den obersten zwei Blenden auslaufen zu lassen
-  (voll bis −2 Blenden, 40 % bei Weiß): Abstand 0,100 → 0,055, Mitten unverändert, Clipping 0,97 → 0,83 %. Noch nicht
-  eingebaut.
+  (voll bis −2 Blenden, 40 % bei Weiß): Abstand 0,100 → 0,055, Mitten unverändert, Clipping 0,97 → 0,83 %. Einwand des
+  Nutzers: die Lightroom-Fassungen sind in den Lichtern keine beurteilte Wahrheit (nur Temp/Tint gesetzt). Deshalb
+  **Sichtvergleich** an sechs Bildern (reiner Faktor / Schulter / Auslaufen): **der reine Faktor ist am besten**
+  (Nutzer, 2026-09-23). Schulter und Auslaufen nicht eingebaut; die Frage der obersten Blende ist damit entschieden.
 
 ---
 
@@ -462,7 +464,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Auto-Pipette im Konverter (Entscheidung des Nutzers: Pipette in Lightroom).
 
 **Offen**
-1. Auto colour balance am Vollbild in Lightroom beurteilen (oberste Blende: Faktor gegen Lightrooms auslaufende Korrektur, 5.8); einfarbige Motive prüfen, sobald welche vorkommen. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
+1. Auto colour balance: oberste Blende per Sichtvergleich entschieden (reiner Faktor). Offen: einfarbige Motive prüfen, sobald welche vorkommen; Rückmeldung an den eigenen lg5+ab-Konvertierungen. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
 2. Filmträger bzw. Filmrand **je Rolle** als Anker (TODO 3; VueScan/OpenEnlarge-Art), ggf. Noritsu-Trägerschätzung aus
    dem Histogramm, wenn kein Rand mitgescannt ist.
 3. Wahre Eingangskurve des X5 messen: Stufenkeil/IT8 als 3F, oder Graukeil vom kalibrierten Monitor auf Film
