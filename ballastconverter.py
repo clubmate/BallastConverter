@@ -1114,7 +1114,9 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
                                        in_curve, os.path.basename(str(out_curve)), stats_crop, grain)
     try:
         out = tifffile.memmap(output_path, shape=(H, W, 3), dtype=np.uint16 if bits == 16 else np.uint8,
-                              photometric="rgb", description=description, extratags=extratags)
+                              photometric="rgb", description=description, metadata=None, extratags=extratags)
+        # metadata=None: newer tifffile (2026.x) otherwise adds its own JSON ImageDescription next to ours; two
+        # ImageDescription tags are invalid TIFF and Lightroom refuses the file
     except OSError as e:
         raise ConversionError(f"cannot write {output_path}: {e}")
 
