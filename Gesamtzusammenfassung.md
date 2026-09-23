@@ -385,6 +385,11 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
   eine ACES-ADX-Pipeline, die im Binary nicht existiert.
 - Übernehmenswert: **weiche Schulter oberhalb des Weißankers** (betrifft die offene Frage der obersten Blende und
   das Clipping der Auto-Balance), Anker je Rolle (bestätigt), Crossover als Werkzeug, dichteneutrale Balance.
+- **Geprüft (2026-09-23, Auswertung Abschnitt 12):** die weiche Schulter macht die hellsten Neutralen +0,1 … +0,2
+  Blenden blau (voller Balance-Faktor bis Weiß), Abstand zu Lightroom in den obersten Blenden 0,10 → 0,12–0,18:
+  verworfen. Besser ist Lightrooms eigene Form, die Balance in den obersten zwei Blenden auslaufen zu lassen
+  (voll bis −2 Blenden, 40 % bei Weiß): Abstand 0,100 → 0,055, Mitten unverändert, Clipping 0,97 → 0,83 %. Noch nicht
+  eingebaut.
 
 ---
 
