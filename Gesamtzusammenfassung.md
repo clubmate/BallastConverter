@@ -20,8 +20,10 @@ Material: Flextight X5, 3F-Scans (`.fff`) von Kodak Portra 400, FlexColor 4.8.13
    bestätigt auf fünf unabhängigen Wegen (Grey-World-Fit, Neutralflächen-Fit, Fuji-Balance-Gerade, Noritsu-Nachbau,
    fremde IT8-auf-Film-Messung negicc). Ursache: RGB-Filter gegen Status-M-Dichte, nicht der Scanner und nicht das Profil.
 5. **Rot bleibt offen**: 1,70 / 1,80 / 1,90 / 1,81 je nach Methode. Das entscheidet nur das Auge am Vollbild.
-6. **Der konstante Farbstich je Bild ist motivabhängig** (Perzentil-Anker) und bleibt Sache der Graupipette in
-   Lightroom. Filmkonstante Anker (Fuji-Art, Filmträger-Balance) waren im Test schlechter, nicht besser.
+6. **Der konstante Farbstich je Bild ist motivabhängig** (Perzentil-Anker). Filmkonstante Anker (Fuji-Art,
+   Filmträger-Balance) waren im Test schlechter, nicht besser. Eine Grau-Balance je Bild (Minilab-Art) trifft dagegen
+   die Handkorrektur des Nutzers bis auf 0,07–0,09 Blenden (5.8, 2026-09-23); ob sie in den Konverter kommt oder
+   Temp/Tint in Lightroom bleibt, ist Sache des Nutzers.
 7. **Kein anderes Programm hat ein besseres Filmmodell.** FlexColor, VueScan, SilverFast, Epson, Frontier, Noritsu,
    OpenEnlarge: alle bestehen aus Ankern je Kanal plus Kurve/Gamma. Übernehmenswert ist nur der
    **Filmträger-Anker je Rolle** (VueScan, OpenEnlarge) und der **Graukeil vom Monitor auf Film** als Messtarget.
@@ -281,6 +283,12 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
   Nebenbefund: Lightrooms Temp/Tint auf ein TIFF ist linear in Blenden (Restfehler 0,01–0,02):
   R − G = 0,0152·Temp + 0,0064·Tint, B − G = −0,0329·Temp + 0,0141·Tint; für Rückmeldungen reichen also die XMP-Werte.
   Wiederholung der Helligkeitsanalyse mit 5×5-Blöcken: gleiches Ergebnis wie mit 15×15.
+- **Grau-Balance je Bild trifft die Handkorrektur (2026-09-23):** Stellt man den Konverter-Ausgang zusätzlich „im
+  Mittel grau“ (Minilab-Art, farbschwache Pixelbevölkerung, Fuji-Verfahren 3), entspricht das der Lightroom-Korrektur
+  des Nutzers mit Korrelation 0,9 je Bild; Rest im Mittel 0, Streuung 0,07 (R) / 0,09 (B) Blenden, praktisch die
+  Wiederholgenauigkeit des Reglers (0,06). Low-grain-Anker allein: Mittel +0,21, Streuung 0,17. Der Nutzer korrigiert
+  also faktisch nach Grau-Integral. Einbau als Option wäre möglich (Begrenzung gegen einfarbige Motive nötig); noch
+  nicht gebaut, Entscheidung des Nutzers, da dieselbe Korrektur in Lightroom mit Temp/Tint möglich ist.
 - Filmrand als Farbanker, jetzt gegen die echten Korrekturen getestet (Filmkonstante k_c auf (Rand/T)^g): nötige
   Balance streut R 0,19 / B 0,37 Blenden, gegen 0,16 / 0,14 mit kornarmen Perzentilen → klar schlechter, bestätigt 5.6.
   Rollenweise Anker nicht prüfbar (10 Scans aus 10 Rollen).
