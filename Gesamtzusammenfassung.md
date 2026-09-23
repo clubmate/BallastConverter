@@ -353,6 +353,7 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 | Fuji Frontier | gelernte Balance-Kurve je Film | Dreifarbmittel + Balance | eine Tonwertkurve |
 | Noritsu | keins | Histogramm-Shift je Rolle | Histogramm-Stretch je Kanal |
 | OpenEnlarge | Farbstoffspektren (13 Filme) | Filmträger je Rolle + skalarer Dmax | ein Gamma für alle + 3×3 im Dichteraum |
+| Korova (Knokke) | keins (Looks je Prozess) | je Rolle aus den Stegen, LED-Licht je Film | Gamma je Kanal + logistische Papierkurve, Crossover |
 
 - VueScan: `P = log10(I)^(2.2/G)`; Weißpunkt 1 %, Schwarzpunkt 0 %; Profile aus der PhotoCD-Datenbank, laut Hamrick
   für Farbnegative nur begrenzt brauchbar.
@@ -373,6 +374,17 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
   skalaren Dmax + Trägeranker. Ein auf einem Bild abgestimmtes Power-Law machte die ganze Bibliothek zu dunkel.
 - Übernehmen: Träger-Anker je Rolle, Graukeil vom Monitor als Target. Nicht übernehmen: ein Gamma für alle. Die
   Dye-Spektren (dye_portra400.csv) nützen ohne die Kanalempfindlichkeiten des X5 nichts.
+
+### Korova 1.10 (Soke Engineering, Knokke-Scanner; 2026-09-23, `recherche/Korova.md`)
+- Aus dem Binary (GLSL-Shader im Klartext, Hilfetexte): kein Filmmodell, keine Matrix. Simulierter Vergrößerer:
+  RGB-LED-Beleuchtung wird **je Filmsorte** so gelöst, dass der Träger neutral aussteuert (Orangemaske analog weg),
+  Flat-Field durch den klaren Träger, **Anker je Rolle** aus den Stegen (Autolevels, auch ein Crossover je Kanal),
+  dann im Log-Raum: Levels je Kanal → Kopplung (Entsättigung) → Crossover-Parabel (an beiden Ankern null) →
+  CMY-Filterverschiebung (Grau-Klick, dichteneutral) → `print_d = 4·sigmoid(4·γ_c·contrast·(n−1))` → 10^−D → Gamma 2,2.
+  Dichter als der Weißanker läuft in die Schulter der Sigmoide statt zu clippen. Die README im Paket beschreibt
+  eine ACES-ADX-Pipeline, die im Binary nicht existiert.
+- Übernehmenswert: **weiche Schulter oberhalb des Weißankers** (betrifft die offene Frage der obersten Blende und
+  das Clipping der Auto-Balance), Anker je Rolle (bestätigt), Crossover als Werkzeug, dichteneutrale Balance.
 
 ---
 
