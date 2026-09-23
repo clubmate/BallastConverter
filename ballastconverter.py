@@ -377,7 +377,11 @@ FILMS = {
 # ---------------------------------------------------------------------------
 NBINS       = 0x8000                    # 32768 histogram bins (Photoshop 16-bit codes 0..32767)
 P_BLACK     = 0.001                     # g2+0x540  "Black" percentile  (white anchor; plugin default 0.005, here 0.1 %)
-GRAIN_BLOCK = 5                         # own addition: block size of the low-grain anchors (option, default off)
+GRAIN_BLOCK = 5                         # own addition: block size of the low-grain anchors (option, default on)
+BALANCE_WIDTH = 0.4                     # own addition, auto colour balance: half-width (stops) of the near-neutral
+                                        # population around the chroma median
+BALANCE_LIMIT = 0.75                    # largest balance correction per channel relative to green (stops)
+BALANCE_MAX_PIXELS = 2_000_000          # pixels sampled for the balance
 P_BPOINT    = 0.001                     # g2+0x628  "BPoint" percentile (black anchor; plugin default 0.005, here 0.1 %)
 FLOOR       = 3.204345703125e-05        # 1.05 / 32768, lower limit in 0x1000aa20
 
@@ -971,10 +975,54 @@ def block_mean_codes(img, block, step=None, chunk_rows=64):
     return np.concatenate(parts, axis=0)
 
 
-def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT, grain=1):
+def balance_sample(stats_img, is_codes, max_pixels=BALANCE_MAX_PIXELS):
+    """Up to max_pixels pixels of the statistics region as codes (n, 3), for the auto colour balance. Odd step
+    (2x2 pixel pattern of Flextight scans). is_codes: stats_img already holds codes (low-grain block means)."""
+    h, w = stats_img.shape[0], stats_img.shape[1]
+    step = int(np.ceil(np.sqrt(max(h * w, 1) / float(max_pixels))))
+    if step > 1 and step % 2 == 0:
+        step += 1
+    sub = np.asarray(stats_img[::max(step, 1), ::max(step, 1)])
+    return (sub if is_codes else to_codes(sub)).reshape(-1, 3)
+
+
+def grey_balance(lin, width=BALANCE_WIDTH, limit=BALANCE_LIMIT):
+    """Own addition (2026-09-23): per-image colour balance in the manner of a minilab's integral-to-grey automatic
+    (Fuji method 3). lin: positive linear values (n, 3) of the statistics region, before the output curve, as the
+    percentile anchors and gammas produce them. The near-neutral population is taken (pixels whose log2 chroma
+    R/G and B/G lies within `width` stops of the chroma median, which excludes saturated colours); the mean chroma
+    of that population is removed, i.e. it becomes neutral on average. Green stays as it is, red and blue are
+    scaled, each by at most `limit` stops (protection against single-colour subjects; a minilab's 'subject
+    failure'). On ten Portra 400 frames this reproduced the user's hand-set white balance in Lightroom to within
+    0.07 (R) / 0.09 (B) stops, correlation 0.9 (recherche/bildpaare, section 11).
+    Returns (factors (3,), shift in stops relative to green (3,), share of the pixels that counted as near-neutral)."""
+    a = np.asarray(lin, dtype=np.float64).reshape(-1, 3)
+    a = a[(a.min(axis=1) > 1e-3) & (a.max(axis=1) < 0.98)]      # neither near black (noise) nor clipped
+    if a.shape[0] < 1000:
+        return np.ones(3), np.zeros(3), 0.0
+    ch = np.log2(a[:, [0, 2]] / a[:, [1]])
+    sel = (np.abs(ch - np.median(ch, axis=0)) < width).all(axis=1)
+    if sel.sum() < 100:
+        return np.ones(3), np.zeros(3), 0.0
+    shift = np.clip(-ch[sel].mean(axis=0), -limit, limit)
+    shift = np.array([shift[0], 0.0, shift[1]])
+    return 2.0 ** shift, shift, float(sel.mean())
+
+
+def balance_text(shift, share):
+    """Log line of the auto colour balance."""
+    t = f"auto colour balance: R {shift[0]:+.2f}  B {shift[2]:+.2f} stops relative to green ({share * 100:.0f} % of the pixels near-neutral)"
+    if np.abs(shift).max() >= BALANCE_LIMIT - 1e-9:
+        t += f" - limited to {BALANCE_LIMIT:g} stops, single-colour subject?"
+    return t
+
+
+def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT, grain=1,
+                  balance=False):
     """Conversion settings as file-name tokens, e.g. 'Portra400-2026_toe_ev-05_w01_b05': film short name
     (or 'g<R>-<G>-<B>' without a film), 'toe' with the datasheet curve, 'ev<+-x>' for an exposure other than 0
-    (exposure = -black), white and black percentile in percent, 'lg<n>' with low-grain anchors (block size n). Numbers are written without the decimal point
+    (exposure = -black), white and black percentile in percent, 'lg<n>' with low-grain anchors (block size n), 'ab'
+    with the auto colour balance. Numbers are written without the decimal point
     (0.1 -> 01, 0.5 -> 05, 1 -> 1, 1.84 -> 184) so that the name contains no dot besides the extension.
     Only letters, digits, '+', '-' and '_'."""
     def num(x, fmt="g"):
@@ -989,12 +1037,15 @@ def settings_name(film=None, gammas=None, film_curve=False, black=0.0, p_black=P
     tokens.append("b" + num(round(p_bpoint * 100, 4)))
     if grain_block(grain) > 1:
         tokens.append(f"lg{grain_block(grain)}")
+    if balance:
+        tokens.append("ab")
     return "_".join(tokens)
 
 
 def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_black=P_BLACK, p_bpoint=P_BPOINT,
-                         in_curve="linear", out_curve="2.2", stats_crop=None, grain=1):
-    """One-line summary of the conversion settings, stored in the TIFF's ImageDescription tag (7-bit ASCII)."""
+                         in_curve="linear", out_curve="2.2", stats_crop=None, grain=1, balance=None):
+    """One-line summary of the conversion settings, stored in the TIFF's ImageDescription tag (7-bit ASCII).
+    balance: None = auto colour balance off, else its shift in stops (3,)."""
     parts = [f"BallastConverter {version()}"]
     if film:
         parts.append(f"film={film}")
@@ -1006,6 +1057,7 @@ def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_
     parts.append(f"black={round(p_bpoint * 100, 4):g}%")
     if grain_block(grain) > 1:
         parts.append(f"low_grain_anchors={grain_block(grain)}x{grain_block(grain)}")
+    parts.append("auto_balance=" + (f"R{balance[0]:+.3f} B{balance[2]:+.3f} stops" if balance is not None else "off"))
     parts.append(f"in_curve={in_curve}")
     parts.append(f"out_curve={out_curve}")
     if stats_crop:
@@ -1016,13 +1068,14 @@ def settings_description(film=None, gammas=None, film_curve=False, black=0.0, p_
 def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
             p_black=P_BLACK, p_bpoint=P_BPOINT, black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True,
             bits=16, crop=None, stats_crop=None, embed_icc="auto", subsample=1,
-            log=print, progress=None, cancel=None, film_curve=None, film=None, grain=1):
+            log=print, progress=None, cancel=None, film_curve=None, film=None, grain=GRAIN_BLOCK, balance=True):
     """
     Complete conversion negative -> positive, writes output_path.
     film_curve          : None, or path of a characteristic-curve file (see load_film_curve): datasheet toe/shoulder
     film                : film name, only for the settings summary in the TIFF's ImageDescription
     grain               : block size of the low-grain anchors (see block_mean_codes), 1 = off = percentiles of single
                           pixels as in the plugin. Only the two anchors change, the output pixels are not smoothed.
+    balance             : auto colour balance (see grey_balance), folded into the CC multipliers
     log(text)           : messages
     progress(frac)      : 0..1 (histogram = first half, writing = second half)
     cancel()            : returns True if the conversion should be aborted
@@ -1095,6 +1148,13 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         log(f"  {n}: gamma={info['gammas'][c]:.4f}  lo={info['lo'][c]:.6f}  hi={info['hi'][c]:.6f}  "
             f"k=lo^g={info['k'][c]:.6f}  v=(lo/hi)^g={info['v'][c]:.6f}")
     log(f"  BPoint={bpoint:.6f}  BPColor={bpcolor.round(6).tolist()}")
+    bal_shift = None
+    if balance:
+        sample = balance_sample(stats_img, grain > 1)
+        _, bal_shift, share = grey_balance(apply(sample, luts, bpoint, bpcolor, 0.0, (1.0, 1.0, 1.0), use_bpoint))
+        cc = tuple(float(cc[c] * 2.0 ** bal_shift[c]) for c in range(3))
+        log("  " + balance_text(bal_shift, share))
+    info.update(balance=bal_shift)
 
     extratags = []
     icc_path = embed_icc
@@ -1111,7 +1171,7 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
         log(f"  embedded profile: {icc_path}")
 
     description = settings_description(film, gammas, bool(film_curve), black, p_black, p_bpoint,
-                                       in_curve, os.path.basename(str(out_curve)), stats_crop, grain)
+                                       in_curve, os.path.basename(str(out_curve)), stats_crop, grain, bal_shift)
     try:
         out = tifffile.memmap(output_path, shape=(H, W, 3), dtype=np.uint16 if bits == 16 else np.uint8,
                               photometric="rgb", description=description, metadata=None, extratags=extratags)
@@ -1168,12 +1228,13 @@ def convert(input_path, output_path, gammas, in_curve="linear", out_curve="2.2",
 
 def convert_codes(codes, gammas, in_curve="linear", out_curve="2.2", p_black=P_BLACK, p_bpoint=P_BPOINT,
                   black=0.0, cc=(1.0, 1.0, 1.0), use_bpoint=True, stats=None, bits=8, film_curve=None,
-                  stats_codes=None):
+                  stats_codes=None, balance=True):
     """Conversion of an already loaded image (codes 0..32767, HxWx3), for the preview in the GUI.
     stats: (y0, y1, x0, x1) region in pixels of this image for the percentiles, None = whole image.
     film_curve: None or path of a characteristic-curve file (datasheet toe/shoulder, see load_film_curve).
     stats_codes: None, or the codes to take the percentiles from instead (already cut to the region; low-grain
     anchors: block means from block_mean_codes), `stats` is ignored then.
+    balance: auto colour balance (see grey_balance), determined from stats_codes.
     Returns (output image uint8/uint16, info)."""
     if stats_codes is None:
         stats_codes = codes if stats is None else codes[stats[0]:stats[1], stats[2]:stats[3]]
@@ -1185,6 +1246,13 @@ def convert_codes(codes, gammas, in_curve="linear", out_curve="2.2", p_black=P_B
     total = stats_codes.shape[0] * stats_codes.shape[1]
     curve = load_film_curve(film_curve) if film_curve else None
     luts, bpoint, bpcolor, info = build_luts(hists, total, gammas, in_curve, p_black, p_bpoint, verbose=False, curve=curve)
+    bal_shift = None
+    if balance:
+        sample = balance_sample(stats_codes, True)
+        _, bal_shift, share = grey_balance(apply(sample, luts, bpoint, bpcolor, 0.0, (1.0, 1.0, 1.0), use_bpoint))
+        cc = tuple(float(cc[c] * 2.0 ** bal_shift[c]) for c in range(3))
+        info["balance_text"] = balance_text(bal_shift, share)
+    info.update(balance=bal_shift)
     # The whole pipeline is pointwise per channel: compute once for all 32768 codes, then only look up.
     all_codes = np.repeat(np.arange(NBINS, dtype=np.uint16)[:, None], 3, axis=1)          # (NBINS, 3)
     lin_tab = apply(all_codes, luts, bpoint, bpcolor, black, tuple(cc), use_bpoint)
@@ -1217,7 +1285,9 @@ def main():
     ap.add_argument("--embed-icc", default="auto", help="embed ICC profile: path, 'none' or 'auto' (default: with --out-curve icc: that profile, with 2.2 profiles/AdobeRGB1998.icc)")
     ap.add_argument("--subsample", type=int, default=1, help="only every n-th pixel (fast preview)")
     ap.add_argument("--datasheet-curve", action="store_true", help="apply the toe/shoulder of the film's datasheet characteristic curve on top of the gammas (only films marked [curve] in --list-films, needs --film)")
-    ap.add_argument("--grain", type=int, nargs="?", const=GRAIN_BLOCK, default=1, metavar="N", help=f"low-grain anchors: take the white/black percentiles from NxN block means instead of single pixels (default N = {GRAIN_BLOCK}, odd; without the option: off). Film grain, mostly in blue, otherwise pulls the white anchor and leaves a yellow cast; the output pixels are not smoothed")
+    ap.add_argument("--grain", type=int, nargs="?", const=GRAIN_BLOCK, default=GRAIN_BLOCK, metavar="N", help=f"low-grain anchors: take the white/black percentiles from NxN block means instead of single pixels (on by default with N = {GRAIN_BLOCK}, odd; --no-grain switches it off). Film grain, mostly in blue, otherwise pulls the white anchor and leaves a yellow cast; the output pixels are not smoothed")
+    ap.add_argument("--no-grain", action="store_true", help="switch the low-grain anchors off (percentiles of single pixels as in the plugin)")
+    ap.add_argument("--no-auto-balance", action="store_true", help=f"switch the auto colour balance off. On by default: after the anchors the near-neutral pixel population of the statistics region is made neutral on average (minilab style), red and blue by at most {BALANCE_LIMIT:g} stops relative to green; the applied shift is logged and written to the TIFF description")
     ap.add_argument("--list-films", action="store_true")
     ap.add_argument("--version", action="version", version=f"BallastConverter {version()}")
     a = ap.parse_args()
@@ -1240,7 +1310,8 @@ def main():
                 raise ConversionError("--datasheet-curve needs --film with a film marked [curve] in --list-films")
         convert(a.input, a.output, gammas, a.in_curve, a.out_curve, a.p_black, a.p_bpoint, a.black, tuple(a.cc),
                 not a.no_bpoint, a.bits, a.crop, a.stats_crop, a.embed_icc, a.subsample, film_curve=film_curve,
-                film=a.film if not a.gammas else None, grain=a.grain)
+                film=a.film if not a.gammas else None, grain=1 if a.no_grain else a.grain,
+                balance=not a.no_auto_balance)
     except ConversionError as e:
         raise SystemExit(f"error: {e}")
 

@@ -48,8 +48,10 @@ classic theme.
    clipped; pull the white point up in Photoshop afterwards.
 7. **White point / Black point**: the percentage of the densest and thinnest pixels inside the frame that is
    skipped when the anchors are set (protection against dust and scratches). Default 0.1.
-   **Low-grain anchors** (optional) takes both anchors from the means of 5×5 pixel blocks instead of single pixels,
-   see below; the file name gets `lg5`.
+   **Low-grain anchors** (on by default) takes both anchors from the means of 5×5 pixel blocks instead of single
+   pixels, see below; the file name gets `lg5`.
+   **Auto colour balance** (on by default) neutralises the near-neutral pixels of the frame on average, in the manner
+   of a minilab, see below; the file name gets `ab`, the applied shift is shown in the log.
 8. **Convert** writes the full-resolution 16-bit TIFF.
 
 The preview updates live with every change. Every control has a tooltip.
@@ -72,7 +74,8 @@ python ballastconverter.py scan.tif positive.tif --gammas 1.84 1.81 1.57 --out-c
 
 `--black 1` equals Exposure −1 in the GUI. `--p-black` and `--p-bpoint` are the white and black point
 percentiles as fractions (0.001 = 0.1 %). `--stats-crop` is the frame in pixels of the original image.
-`--grain` is the low-grain anchors checkbox (`--grain 3` for another block size).
+`--no-grain` and `--no-auto-balance` untick the low-grain anchors and the auto colour balance (`--grain 3` for
+another block size).
 `--datasheet-curve` is the curve checkbox of the GUI; it needs `--film` with a film marked `[curve]` in
 `--list-films`. `--help` lists everything.
 
@@ -109,13 +112,26 @@ on each channel's own density scale: the correction then depends on exposure onl
 datasheet describes fresh film in a normal process measured with Status M filters, not your roll or your scanner,
 so compare both settings on your own scans.
 
-**Low-grain anchors** (optional): in a high-resolution scan the most extreme 0.1 % of the pixels are film grain,
+**Low-grain anchors** (on by default): in a high-resolution scan the most extreme 0.1 % of the pixels are film grain,
 not image content, and the blue channel (densest layer of a colour negative) has the most of it. The white anchor of
 blue then sits too dense and the whole positive gets a constant yellow cast. Measured on ten Portra 400 frames from
 a Flextight X5 (11 000 px long side): the option brings blue up by 0.16 stops relative to green (0.07–0.27 per
 frame), about 40 % of the white-balance correction these frames needed in Lightroom, and it follows the correction
 frame by frame (correlation 0.85). Only the two anchors change; the image is not smoothed. Unticked, the output is
 bit-identical to before. On low-resolution scans a 5×5 block can swallow small real highlights, so compare.
+
+**Auto colour balance** (on by default): the percentile anchors set each channel's white from the densest 0.1 % of
+that channel, so the colour balance of the positive depends on what the brightest red, green and blue things in the
+picture are; the constant cast that remains is what a minilab's automatic and the white-balance eyedropper remove.
+The option does what the minilab does: after the anchors it takes the near-neutral pixel population of the frame
+(pixels within 0.4 stops of the most common colour, saturated colours excluded) and scales red and blue so that this
+population is neutral on average; green stays. Each channel moves by at most 0.75 stops, so a subject dominated by
+one colour cannot pull the picture too far. On ten Portra 400 frames with the low-grain anchors the result matched
+the white balance the user had set by hand in Lightroom to within 0.07 (red) / 0.06 (blue) stops, correlation 0.9;
+without the option the same frames needed 0.1–0.75 stops of blue and up to 0.25 stops of red in Lightroom. The
+applied shift is a plain per-channel factor (logged and written to the TIFF description), so Lightroom's Temp/Tint
+can undo it exactly for the rare picture where the automatic guesses wrong. The lifted channel clips a little more
+at the very top (about 0.2–0.6 % of the values on the test frames); Exposure −0.5 gives headroom if that matters.
 
 ## Building the Windows executable yourself
 

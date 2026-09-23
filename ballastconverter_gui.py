@@ -48,6 +48,7 @@ ACCENT    = "#57c8ff"
 MANUAL = "Manual"
 CURVE_TEXT = "Datasheet toe/shoulder curve"
 GRAIN_TEXT = "Low-grain anchors (white/black point from 5×5 means)"
+BALANCE_TEXT = "Auto colour balance (near-neutral pixels to grey, ±0.75 stops)"
 CURVE_TEXT_NA = "Datasheet toe/shoulder curve (no data for this film)"
 
 
@@ -116,10 +117,20 @@ TIPS = {
     "bp": "Share of the thinnest pixels in the green frame that is skipped when setting the black anchor. "
           "The thinnest point is set to neutral black per channel (removes the orange mask); these "
           "pixels end up below black. Default 0.1 %.",
-    "grain": "Takes the white and black point from the mean of small pixel blocks instead of single pixels. At full "
-             "scan resolution the 0.1 % extreme pixels are film grain, mostly in the blue channel; that pulls the blue "
-             "white anchor and leaves a constant yellow cast (about 0.15 stops on Portra 400 / Flextight X5). Only the "
-             "two anchors change, the image itself is not smoothed. Off = single pixels as in the ColorPerfect plugin.",
+    "grain": "What it does: the white and black point of each channel are taken from the mean of small 5×5 pixel "
+             "blocks instead of single pixels. Why: at full scan resolution the 0.1 % most extreme pixels are film "
+             "grain, not image content, mostly in the blue channel (densest layer). Grain pulls the blue white point "
+             "too far and the whole picture gets a constant yellow cast (about 0.15 stops on Portra 400 / Flextight "
+             "X5). Only the two anchors change, the image itself is not smoothed. Unticked = single pixels as in the "
+             "ColorPerfect plugin. File name: 'lg5'.",
+    "balance": "What it does: after the anchors, the picture is colour-balanced like a minilab does it. The pixels near "
+               "the most common colour (the near-neutral population, saturated colours excluded) are made neutral on "
+               "average; red and blue are scaled, green stays, each by at most 0.75 stops. On ten Portra 400 frames "
+               "this matched the white balance set by hand in Lightroom to within 0.07 stops.\n"
+               "CAUTION: it assumes the picture is neutral on average. A picture dominated by one colour (a large red "
+               "wall, a rape field, snow in blue shade, a sunset) can come out wrong: the automatic takes the wall for "
+               "grey and tints the rest. Then untick the option, or undo it in Lightroom with Temp/Tint: the shift is "
+               "a plain per-channel factor, shown in the log and stored in the TIFF description. File name: 'ab'.",
     "run": "Converts the whole scan at full resolution and writes the output file. Only possible once a "
            "frame has been set on the preview.",
 }
@@ -324,10 +335,14 @@ class App(tk.Tk):
         e_bp = ttk.Entry(uf, textvariable=self.v_bp, width=5)
         e_bp.pack(side="left")
         Tooltip(TIPS["bp"], l_bp, e_bp)
-        self.v_grain = tk.BooleanVar(value=False)
+        self.v_grain = tk.BooleanVar(value=True)
         cb_grain = ttk.Checkbutton(c, text=GRAIN_TEXT, variable=self.v_grain, command=self._setting_changed)
         cb_grain.grid(row=2, column=0, columnspan=3, sticky="w", **rowpad)
         Tooltip(TIPS["grain"], cb_grain)
+        self.v_balance = tk.BooleanVar(value=True)
+        cb_balance = ttk.Checkbutton(c, text=BALANCE_TEXT, variable=self.v_balance, command=self._setting_changed)
+        cb_balance.grid(row=3, column=0, columnspan=3, sticky="w", **rowpad)
+        Tooltip(TIPS["balance"], cb_balance)
 
         # Statistics region: set only via the frame on the preview (no numeric fields)
         self.v_scrop = [tk.StringVar() for _ in range(4)]
@@ -461,7 +476,7 @@ class App(tk.Tk):
             if not (0 < wp <= 50 and 0 < bp <= 50):
                 return None
             return "_" + cn.settings_name(film, gammas, curve, -self._num(self.v_expo, "Exposure", empty=0.0),
-                                          wp / 100.0, bp / 100.0, self._grain()) + ".tif"
+                                          wp / 100.0, bp / 100.0, self._grain(), self.v_balance.get()) + ".tif"
         except (ValueError, cn.ConversionError):
             return None
 
@@ -695,7 +710,7 @@ class App(tk.Tk):
             crop=None, stats_crop=self._four(self.v_scrop),
             embed_icc="auto",
             film_curve=self._film_curve() if self.v_curve.get() else None,
-            film=film, grain=self._grain(),
+            film=film, grain=self._grain(), balance=bool(self.v_balance.get()),
         )
         if not (0 < p["p_black"] <= 0.5 and 0 < p["p_bpoint"] <= 0.5):
             raise ValueError("White point and black point must be between 0 and 50 (percent)")
@@ -814,10 +829,14 @@ class App(tk.Tk):
             gstats = self._preview_grain_stats(p["stats_crop"]) if p["grain"] > 1 else None
             arr, info = cn.convert_codes(self.prev_codes, p["gammas"], p["in_curve"], p["out_curve"],
                                          p["p_black"], p["p_bpoint"], p["black"], stats=stats, bits=8,
-                                         film_curve=p["film_curve"], stats_codes=gstats)
+                                         film_curve=p["film_curve"], stats_codes=gstats, balance=p["balance"])
         except Exception as e:
             self._log(f"Preview: {e}")
             return
+        bt = info.get("balance_text")
+        if bt and bt != getattr(self, "_last_balance_text", None):
+            self._last_balance_text = bt
+            self._log("preview " + bt)
         self.preview_arr = np.ascontiguousarray(arr)
         self._render_preview()
 
@@ -971,7 +990,7 @@ class App(tk.Tk):
         return dict(
             input=self.v_in.get(), output=self.v_out.get(), output_dir=self.out_dir or "", film=self.v_film.get(),
             gammas=[self.v_gr.get(), self.v_gg.get(), self.v_gb.get()], datasheet_curve=bool(self.v_curve.get()),
-            low_grain=bool(self.v_grain.get()),
+            low_grain=bool(self.v_grain.get()), auto_balance=bool(self.v_balance.get()),
             in_curve=self._portable_icc(self._in_curve()), out_profile=self._portable_icc(self._out_profile_path() or ""),
             exposure=self.v_expo.get(), white_pct=self.v_wp.get(), black_pct=self.v_bp.get(),
             stats_crop=[v.get() for v in self.v_scrop],
@@ -1004,7 +1023,8 @@ class App(tk.Tk):
             if self.v_film.get() == MANUAL:
                 for v, x in zip((self.v_gr, self.v_gg, self.v_gb), s.get("gammas", ["", "", ""])): v.set(x)
             self.v_curve.set(bool(s.get("datasheet_curve", False)))
-            self.v_grain.set(bool(s.get("low_grain", False)))
+            self.v_grain.set(bool(s.get("low_grain", True)))
+            self.v_balance.set(bool(s.get("auto_balance", True)))
             ic = s.get("in_curve", "linear")
             if ic.startswith("icc:"):
                 ic = "icc:" + cn.resolve_icc(ic[4:])

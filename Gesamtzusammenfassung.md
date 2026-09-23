@@ -287,8 +287,10 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
   Mittel grau“ (Minilab-Art, farbschwache Pixelbevölkerung, Fuji-Verfahren 3), entspricht das der Lightroom-Korrektur
   des Nutzers mit Korrelation 0,9 je Bild; Rest im Mittel 0, Streuung 0,07 (R) / 0,09 (B) Blenden, praktisch die
   Wiederholgenauigkeit des Reglers (0,06). Low-grain-Anker allein: Mittel +0,21, Streuung 0,17. Der Nutzer korrigiert
-  also faktisch nach Grau-Integral. Einbau als Option wäre möglich (Begrenzung gegen einfarbige Motive nötig); noch
-  nicht gebaut, Entscheidung des Nutzers, da dieselbe Korrektur in Lightroom mit Temp/Tint möglich ist.
+  also faktisch nach Grau-Integral. **Eingebaut** (2026-09-23, Wunsch des Nutzers, Standard an, ebenso die
+  Korn-Option): an den 10 Paaren bleibt mit beiden Optionen ein Lightroom-Bedarf von im Mittel R −0,03 / B 0,00,
+  Streuung 0,07 / 0,06 Blenden (vorher B +0,42, Streuung 0,18). Begrenzung 0,75 Blenden je Kanal (0,5 griff bei zwei
+  normalen Bildern). Der gehobene Kanal clippt oben etwas mehr (0,2–0,6 % der Werte); Belichtung −0,5 gibt Reserve.
 - Filmrand als Farbanker, jetzt gegen die echten Korrekturen getestet (Filmkonstante k_c auf (Rand/T)^g): nötige
   Balance streut R 0,19 / B 0,37 Blenden, gegen 0,16 / 0,14 mit kornarmen Perzentilen → klar schlechter, bestätigt 5.6.
   Rollenweise Anker nicht prüfbar (10 Scans aus 10 Rollen).
@@ -403,7 +405,12 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
   `recherche/`, `TODO.md`, Scans und Bilder sind gitignored.
 - Live-Vorschau (einmal laden, 1600 px, LUT je Kanal), Convert erst nach dem grünen Statistikrahmen.
 - Standard: Perzentile 0,1 %, Belichtung 0, Ausgabe 16 Bit mit TRC von AdobeRGB1998.icc, Profil eingebettet.
-- Option „Low-grain anchors“ (Checkbox / `--grain`, aus = Standard): Anker aus 5×5-Blockmitteln, siehe 5.8.
+- Option „Low-grain anchors“ (Checkbox / `--grain`, seit 2026-09-23 Standard an, `--no-grain`): Anker aus
+  5×5-Blockmitteln, siehe 5.8.
+- Option „Auto colour balance“ (Checkbox / `--no-auto-balance`, Standard an, Namenszusatz `ab`, 2026-09-23): nach
+  den Ankern wird die nahe-neutrale Pixelbevölkerung der Statistik-Region im Mittel neutral gestellt (Minilab-Art,
+  Fuji-Verfahren 3), Rot und Blau je höchstens 0,75 Blenden, Grün bleibt; Verschiebung im Log und in der
+  TIFF-Beschreibung. Aus = bitidentisch. Siehe 5.8.
 - Ausgabename `<scan>_<film>_toe_ev-05_w01_b05.tif`; Einstellungen auch in der TIFF-ImageDescription.
 - Bewusst entfernt: Film-Gamma-Faktor, CC-Felder, 8 Bit, Schwarzpunkt-Checkbox, Abbrechen, Theme-Umschalter.
 - Rezept des ersten Ergebnisses (reproduziert `18-29_16_positiv_portra400.tif` bitidentisch):
@@ -438,7 +445,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 - Auto-Pipette im Konverter (Entscheidung des Nutzers: Pipette in Lightroom).
 
 **Offen**
-1. Rest-Blaustich (≈ 0,21 Blenden nach „Low-grain anchors“, am Nutzer-Ergebnis bestätigt; motivabhängig, dieselben vier Bilder) klären. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
+1. Auto colour balance am Vollbild in Lightroom beurteilen (oberste Blende: Faktor gegen Lightrooms auslaufende Korrektur, 5.8); einfarbige Motive prüfen, sobald welche vorkommen. Fuß/Schulter-Option weiter am Vollbild beurteilen (Rot-Frage durch 5.8 erledigt: 1,70).
 2. Filmträger bzw. Filmrand **je Rolle** als Anker (TODO 3; VueScan/OpenEnlarge-Art), ggf. Noritsu-Trägerschätzung aus
    dem Histogramm, wenn kein Rand mitgescannt ist.
 3. Wahre Eingangskurve des X5 messen: Stufenkeil/IT8 als 3F, oder Graukeil vom kalibrierten Monitor auf Film
