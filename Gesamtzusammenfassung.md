@@ -295,6 +295,18 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
   Balance streut R 0,19 / B 0,37 Blenden, gegen 0,16 / 0,14 mit kornarmen Perzentilen → klar schlechter, bestätigt 5.6.
   Rollenweise Anker nicht prüfbar (10 Scans aus 10 Rollen).
 
+### 5.9 Inhalt über dem Weißanker, farbiges Clipping (2026-09-24, Auswertung Abschnitt 13)
+- Mit den Standardwerten liegt im Mittel **1,06 % der Pixel über 1,0** und wird in der TIFF hart abgeschnitten;
+  bei 0,84 % nur **ein Kanal, fast immer Blau** (Auto-Balance-Faktor +0,12 … +0,62 Blenden) → farbig geclippte
+  helle Neutralflächen und Himmel, die Lightroom nicht mehr neutral bekommt. Überschuss klein: Median 0,15–0,35
+  Blenden, 99 % unter einer Blende, Spitzlichter bis 3,6.
+- **Headroom:** 0,5 Blenden halten 99,9 % der Pixel unter dem Anschlag, 1 Blende 99,99 % (schlimmstes Bild
+  0,94 / 1,40). Ein linearer Headroom statt einer Schulter würde den Inhalt ohne Formänderung an Lightroom
+  weiterreichen (Datei entsprechend dunkler, Belichtung in Lightroom). Offen, Entscheidung des Nutzers.
+- Antwort auf die Frage des Nutzers zur Schulter: richtig gedacht, eine Schulter wirkt nur auf Inhalt, der an das
+  Weiß gedrückt wird; unsere Ausgabe ist flach, der Weißpunkt wird erst in Lightroom gesetzt, und dort hat
+  Lightroom die Schulter selbst. Schulter und Kontrastentscheidung gehören zusammen.
+
 ---
 
 ## 6. Wie Laborscanner umwandeln
