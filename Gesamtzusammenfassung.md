@@ -355,6 +355,8 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 | OpenEnlarge | Farbstoffspektren (13 Filme) | Filmträger je Rolle + skalarer Dmax | ein Gamma für alle + 3×3 im Dichteraum |
 | Korova (Knokke) | keins (Looks je Prozess) | je Rolle aus den Stegen, LED-Licht je Film | Gamma je Kanal + logistische Papierkurve, Crossover |
 | Negative Lab Pro 3.1 | keins („Film“ = Magenta/Gelb-Offsets) | je Bild, 0,01 %/0,05 % auf 200-px-Vorschau, 2 px weich | Levels im Gamma-Raum + Auto-Gamma + Sigmoide; Balance = Kanal-Gamma (Grauwelt) |
+| Grain2Pixel 5.5 | keins | Division durch Trägerfarbe je Kanal (Rand/Rolle), dann 0,04 %/0,01 % je Kanal | `1 − 10^(−D/5,28)` (feste Schulter) + Photoshop Auto-Farbe; HSL-Look je Scannertyp |
+| SmartConvert (Filmomat) | unbekannt (PyArmor-verschlüsselt) | je Bild aus Extremwerten (Handbuch: Rand im Bild → „washed-out“) | unbekannt; Auto-WB, CMY/Dichte/Kontrast, „keine Looks“ |
 
 - VueScan: `P = log10(I)^(2.2/G)`; Weißpunkt 1 %, Schwarzpunkt 0 %; Profile aus der PhotoCD-Datenbank, laut Hamrick
   für Farbnegative nur begrenzt brauchbar.
@@ -409,6 +411,26 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 - Übernehmen: nichts. Die Anker-Methode bestätigt unsere „low-grain“-Perzentile; die Balance als Kanal-Gamma
   ist „Levels = Filmgamma“ von der anderen Seite, unsere Bildpaare zeigen aber einen Faktor (Sichtvergleich
   2026-09-23); Auto-Helligkeit und Haut-Entsättigung kann Lightroom selbst.
+
+### Grain2Pixel 5.5.2 (Photoshop-Skript; 2026-09-24, `recherche/Grain2Pixel.md`)
+- jsxbin mit jsxer dekompiliert. **Kein Filmmodell**; Photoshop-Ebenenfolge: dcraw ohne Matrix und ohne WB
+  (Kamera-RGB, sRGB-Kurve) → Trägerfarbe aus dem Filmrand (oder Hex/Rollenmittel) → Levels auf Träger-Helligkeit
+  und **Division durch die Trägerfarbe** (Weißanker je Kanal am Träger) → Belichtungsebene Gamma 2,4
+  (`x^(1/2,4)`) → Invertieren, zusammen `P = 1 − 10^(−D/5,28)`: Positiv ≈ proportional zur Dichte mit fester
+  Schulter → Camera-Raw-HSL je Scannertyp (Sättigung +15…25, Grün-Farbton +8…15) → „Smart CCR“: **Perzentil-Anker
+  0,04 %/0,01 % je Kanal**, dann Photoshops „Auto-Farbe“ (Mitteltöne neutral) → optional Auto-Kontrast mit weichem
+  Fuß und Schulter (4-Punkt-Kurven). Rollenmodus: Trägerfarbe und Levels **einmal je Rolle**. „Heavy CCR“ rechnet
+  ein Gamma je Kanal aus der Trägerfarbe (= „Levels = Filmgamma“ aus dem Träger).
+- Übernehmen: nichts Neues. Anker je Rolle zum vierten Mal bestätigt (offen bis mehrere Bilder einer Rolle
+  vorliegen); die feste Schulter entspricht dem verworfenen Korova-Test.
+
+### Filmomat SmartConvert (Demo 2025-12; 2026-09-24, `recherche/SmartConvert.md`)
+- PyInstaller, Hauptmodul mit **PyArmor 8 verschlüsselt** – nicht dekompilierbar. Sichtbar nur: LibRaw 0.22 über
+  eigenen Wrapper (Gamma, Ausgabefarbraum, Auto-Aufhellung werden gesetzt), numpy/OpenCV, kein scipy, Adobe-RGB-
+  Profil für JPEG. Hersteller: keine LUTs/Looks, nur Information aus dem Negativ, Auto-WB, CMY/Dichte/Kontrast.
+  Handbuch: Rand im Bild macht das Ergebnis „washed-out“ → Anker aus Extremwerten je Bild. Die RA4-Vermutung im
+  Forum stammt von einem Nutzer. Black-Box-Test (synthetischer Graukeil unter Wine) ist vorbereitet, Start des
+  Programms in dieser Sitzung blockiert.
 
 ---
 
@@ -512,5 +534,6 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 | `recherche/Filmpresets_Portra400.md`, `recherche/negicc/` | Presets anderer Programme, negicc-Messung |
 | `recherche/OpenEnlarge.md` | OpenEnlarge |
 | `recherche/Korova.md`, `recherche/NegativeLabPro.md` | Korova, Negative Lab Pro (dekompiliert in `~/.cache/cp_re/nlp/`) |
+| `recherche/Grain2Pixel.md`, `recherche/SmartConvert.md` | Grain2Pixel (dekompiliert in `~/.cache/cp_re/g2p/`), SmartConvert (verschlüsselt; Testbilder und Wine in `~/.cache/cp_re/`) |
 | `TODO.md` | Checkliste |
 | `~/.cache/cp_re` | Ghidra, dekompilierter Plugin-Code |
