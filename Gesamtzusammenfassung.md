@@ -356,7 +356,7 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 | Korova (Knokke) | keins (Looks je Prozess) | je Rolle aus den Stegen, LED-Licht je Film | Gamma je Kanal + logistische Papierkurve, Crossover |
 | Negative Lab Pro 3.1 | keins („Film“ = Magenta/Gelb-Offsets) | je Bild, 0,01 %/0,05 % auf 200-px-Vorschau, 2 px weich | Levels im Gamma-Raum + Auto-Gamma + Sigmoide; Balance = Kanal-Gamma (Grauwelt) |
 | Grain2Pixel 5.5 | keins | Division durch Trägerfarbe je Kanal (Rand/Rolle), dann 0,04 %/0,01 % je Kanal | `1 − 10^(−D/5,28)` (feste Schulter) + Photoshop Auto-Farbe; HSL-Look je Scannertyp |
-| SmartConvert (Filmomat) | unbekannt (PyArmor-verschlüsselt) | je Bild aus Extremwerten (Handbuch: Rand im Bild → „washed-out“) | unbekannt; Auto-WB, CMY/Dichte/Kontrast, „keine Looks“ |
+| SmartConvert (Filmomat) | keins (gemessen) | je Bild, gemeinsam für alle Kanäle, an den Extremen | feste Papierkurve (Steigung 2,3, Schulter), eine für alle Kanäle; Balance = Dichteverschiebung je Kanal |
 
 - VueScan: `P = log10(I)^(2.2/G)`; Weißpunkt 1 %, Schwarzpunkt 0 %; Profile aus der PhotoCD-Datenbank, laut Hamrick
   für Farbnegative nur begrenzt brauchbar.
@@ -424,13 +424,19 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 - Übernehmen: nichts Neues. Anker je Rolle zum vierten Mal bestätigt (offen bis mehrere Bilder einer Rolle
   vorliegen); die feste Schulter entspricht dem verworfenen Korova-Test.
 
-### Filmomat SmartConvert (Demo 2025-12; 2026-09-24, `recherche/SmartConvert.md`)
-- PyInstaller, Hauptmodul mit **PyArmor 8 verschlüsselt** – nicht dekompilierbar. Sichtbar nur: LibRaw 0.22 über
-  eigenen Wrapper (Gamma, Ausgabefarbraum, Auto-Aufhellung werden gesetzt), numpy/OpenCV, kein scipy, Adobe-RGB-
-  Profil für JPEG. Hersteller: keine LUTs/Looks, nur Information aus dem Negativ, Auto-WB, CMY/Dichte/Kontrast.
-  Handbuch: Rand im Bild macht das Ergebnis „washed-out“ → Anker aus Extremwerten je Bild. Die RA4-Vermutung im
-  Forum stammt von einem Nutzer. Black-Box-Test (synthetischer Graukeil unter Wine) ist vorbereitet, Start des
-  Programms in dieser Sitzung blockiert.
+### Filmomat SmartConvert 3.40 (Demo; 2026-09-24, `recherche/SmartConvert.md`, `recherche/smartconvert/`)
+- PyInstaller, Hauptmodul mit **PyArmor 8 verschlüsselt** – nicht dekompilierbar (sichtbar nur LibRaw 0.22,
+  numpy/OpenCV, Qt6). Deshalb **Black-Box-Test unter Wine** mit synthetischen Negativen (Graukeil-Film mit
+  Gammas 0,60/0,63/0,66, Orangemaske, gaußverteilte Szene; Eingabe über ein mingw-Hilfsprogramm in Wine).
+- Gemessen: **eine Kurve für alle Kanäle**, Weißabgleich als **Dichteverschiebung je Kanal** (Filterpack;
+  G +0,09 D, B +0,22 D, Rest ≤ 0,02) – kein Gamma je Kanal, der Graukeil ist nur bei einer Dichte neutral
+  (helle Töne), die Schatten laufen rot-gelb. Kurve = **Papierkurve**: log-log-Steigung ≈ 2,3 in den Mitten,
+  harter Schwarzpunkt, lange Schulter (Sigmoide, Rest 0,005 D), nutzbar ≈ 1,4 D. Anker je Bild an den
+  **Extremen, gemeinsam** (Schwarz/Weiß nicht neutral). Trägerfarbe wird vollständig weggerechnet (andere
+  Maske → gleiche Ausgabe auf 0,005). Dichte-Automatik fast vollständig (+0,36 D → Kurve +0,3 D).
+- Fazit: simulierter Vergrößerer mit Papier, dasselbe Modell wie Korova; ein Gammaunterschied zwischen den
+  Schichten (unser Portra-Befund 1,70/1,81/1,95) ist damit **nicht korrigierbar**, die CMY-Tasten sind
+  dichteunabhängig. Genau das ist der Vorteil des Konverters. Nichts zu übernehmen.
 
 ---
 
