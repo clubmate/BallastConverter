@@ -539,7 +539,7 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 | `recherche/Scanprogramme_Umwandlung.md` | VueScan, SilverFast, Epson |
 | `recherche/Filmpresets_Portra400.md`, `recherche/negicc/` | Presets anderer Programme, negicc-Messung |
 | `recherche/OpenEnlarge.md` | OpenEnlarge |
-| `recherche/Korova.md`, `recherche/NegativeLabPro.md` | Korova, Negative Lab Pro (dekompiliert in `~/.cache/cp_re/nlp/`) |
-| `recherche/Grain2Pixel.md`, `recherche/SmartConvert.md` | Grain2Pixel (dekompiliert in `~/.cache/cp_re/g2p/`), SmartConvert (verschlüsselt; Testbilder und Wine in `~/.cache/cp_re/`) |
+| `recherche/Korova.md`, `recherche/NegativeLabPro.md` | Korova, Negative Lab Pro (dekompilierte Quellen am 2026-09-24 gelöscht) |
+| `recherche/Grain2Pixel.md`, `recherche/SmartConvert.md`, `recherche/smartconvert/` | Grain2Pixel, SmartConvert (Black-Box-Test; dekompilierte Quellen und Wine am 2026-09-24 gelöscht) |
 | `TODO.md` | Checkliste |
 | `~/.cache/cp_re` | Ghidra, dekompilierter Plugin-Code |
