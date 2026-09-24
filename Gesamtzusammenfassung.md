@@ -302,7 +302,7 @@ Schattenfläche als neutral gefittet“ betrifft auch 17-89 #2, 18-29 #4, 19-62 
   Blenden, 99 % unter einer Blende, Spitzlichter bis 3,6.
 - **Headroom:** 0,5 Blenden halten 99,9 % der Pixel unter dem Anschlag, 1 Blende 99,99 % (schlimmstes Bild
   0,94 / 1,40). Ein linearer Headroom statt einer Schulter würde den Inhalt ohne Formänderung an Lightroom
-  weiterreichen (Datei entsprechend dunkler, Belichtung in Lightroom). Offen, Entscheidung des Nutzers.
+  weiterreichen (Datei entsprechend dunkler, Belichtung in Lightroom). **Entscheidung des Nutzers (2026-09-24): vorerst nicht einbauen.**
 - Antwort auf die Frage des Nutzers zur Schulter: richtig gedacht, eine Schulter wirkt nur auf Inhalt, der an das
   Weiß gedrückt wird; unsere Ausgabe ist flach, der Weißpunkt wird erst in Lightroom gesetzt, und dort hat
   Lightroom die Schulter selbst. Schulter und Kontrastentscheidung gehören zusammen.
