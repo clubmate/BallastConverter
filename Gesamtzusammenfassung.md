@@ -1,4 +1,4 @@
-# BallastConverter – Gesamtzusammenfassung aller Recherchen (Stand 2026-09-21)
+# BallastConverter – Gesamtzusammenfassung aller Recherchen (Stand 2026-09-24)
 
 Dieses Dokument fasst alles zusammen, was zwischen dem 2026-09-10 und dem 2026-09-18 recherchiert, gemessen und
 getestet wurde, und wird bei neuen Erkenntnissen fortgeschrieben. Die Einzelnotizen mit allen Rohzahlen liegen
@@ -354,6 +354,7 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
 | Noritsu | keins | Histogramm-Shift je Rolle | Histogramm-Stretch je Kanal |
 | OpenEnlarge | Farbstoffspektren (13 Filme) | Filmträger je Rolle + skalarer Dmax | ein Gamma für alle + 3×3 im Dichteraum |
 | Korova (Knokke) | keins (Looks je Prozess) | je Rolle aus den Stegen, LED-Licht je Film | Gamma je Kanal + logistische Papierkurve, Crossover |
+| Negative Lab Pro 3.1 | keins („Film“ = Magenta/Gelb-Offsets) | je Bild, 0,01 %/0,05 % auf 200-px-Vorschau, 2 px weich | Levels im Gamma-Raum + Auto-Gamma + Sigmoide; Balance = Kanal-Gamma (Grauwelt) |
 
 - VueScan: `P = log10(I)^(2.2/G)`; Weißpunkt 1 %, Schwarzpunkt 0 %; Profile aus der PhotoCD-Datenbank, laut Hamrick
   für Farbnegative nur begrenzt brauchbar.
@@ -392,6 +393,22 @@ Blenden: Datenblatt −0,11/−0,12, X5 fit −0,08/−0,54, X5 neutral +0,02/�
   Nutzers: die Lightroom-Fassungen sind in den Lichtern keine beurteilte Wahrheit (nur Temp/Tint gesetzt). Deshalb
   **Sichtvergleich** an sechs Bildern (reiner Faktor / Schulter / Auslaufen): **der reine Faktor ist am besten**
   (Nutzer, 2026-09-23). Schulter und Auslaufen nicht eingebaut; die Frage der obersten Blende ist damit entschieden.
+
+### Negative Lab Pro 3.1.1 (Lightroom-Plugin; 2026-09-24, `recherche/NegativeLabPro.md`)
+- Aus dem dekompilierten Plugin (Lua) und den mitgelieferten DCP-Profilen: **kein Filmmodell**, keine Matrix; die
+  „Film“-Auswahl sind je zwei feste Zahlen (Magenta/Gelb). Ablauf je Bild: Lightroom exportiert eine 200-px-
+  Vorschau (Kameraprofil „Negative Lab v2.3“), ImageMagick schneidet 5 % Rand weg, zeichnet 2 px weich;
+  **Anker je Kanal** bei 0,01 % (Weiß) und 0,05 % (Schwarz) – praktisch Minimum/Maximum des verschmierten Bilds;
+  dazwischen eine **Gerade im gammakodierten Raum** (Levels, 3–9 Stützstellen), dann Auto-Gamma (Histogramm-
+  mittel auf 0,5, geklemmt 0,8…1,1), tanh-Sigmoide (Stärke 3), kleine Schwarz/Weiß-Füße, Invertierung, Ausgabe
+  als Lightroom-Tonwertkurven je Kanal. **Auto-Weißabgleich immer an:** Grauwelt über Pixel mit Sättigung < 30 %,
+  ausgeführt als **Gamma je Kanal für Grün und Blau, Rot fest** (Null an beiden Ankern). Farbarbeit steckt in
+  der für alle Kameras gleichen Look-Tabelle des DCP (Sättigung ×0,92, Rot-Orange ×0,54–0,71 und +5–8 % Helligkeit)
+  und in nicht lesbaren Lab-LUTs (Frontier/Crystal/Pakon). TIFF-Scans: Gamma-Hilfsprogramm mit **Flextight 1,8**
+  → Weißanker je Kanal → Gamma 2,2 (passt zu unserem ≈ 1,75).
+- Übernehmen: nichts. Die Anker-Methode bestätigt unsere „low-grain“-Perzentile; die Balance als Kanal-Gamma
+  ist „Levels = Filmgamma“ von der anderen Seite, unsere Bildpaare zeigen aber einen Faktor (Sichtvergleich
+  2026-09-23); Auto-Helligkeit und Haut-Entsättigung kann Lightroom selbst.
 
 ---
 
@@ -494,5 +511,6 @@ Ektar 100, 0 / +1 / +2 / −1 Blenden, abfotografiert mit Sony A7RM4 durch Dreib
 | `recherche/Scanprogramme_Umwandlung.md` | VueScan, SilverFast, Epson |
 | `recherche/Filmpresets_Portra400.md`, `recherche/negicc/` | Presets anderer Programme, negicc-Messung |
 | `recherche/OpenEnlarge.md` | OpenEnlarge |
+| `recherche/Korova.md`, `recherche/NegativeLabPro.md` | Korova, Negative Lab Pro (dekompiliert in `~/.cache/cp_re/nlp/`) |
 | `TODO.md` | Checkliste |
 | `~/.cache/cp_re` | Ghidra, dekompilierter Plugin-Code |
